@@ -4,7 +4,7 @@ NestJS 기반의 백엔드 애플리케이션입니다.
 
 ## 🚀 기술 스택
 
-- **Node.js** - JavaScript 런타임
+- **Node.js v20.19.4** - JavaScript 런타임 (nvm 관리)
 - **NestJS** - Node.js 프레임워크
 - **TypeScript** - 정적 타입 지원
 - **Swagger/OpenAPI** - API 문서화
@@ -33,6 +33,22 @@ src/
 ```
 
 ## 🛠️ 설치 및 실행
+
+### Node.js 버전 관리
+
+이 프로젝트는 Node.js v20.19.4를 사용합니다. nvm을 사용하여 버전을 관리합니다.
+
+```bash
+# nvm 설치 (없는 경우)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+# Node.js 20 설치 및 사용
+nvm install 20
+nvm use
+
+# 또는 .nvmrc 파일 기반으로 자동 설정
+nvm use
+```
 
 ### 환경 변수 설정
 
@@ -114,8 +130,6 @@ npm run format
 | `PORT` | 서버 포트 | `3000` |
 | `NODE_ENV` | 환경 모드 | `development` |
 | `DATABASE_URL` | 데이터베이스 URL | - |
-| `JWT_SECRET` | JWT 시크릿 키 | - |
-| `JWT_EXPIRES_IN` | JWT 만료 시간 | `7d` |
 
 ## 📝 개발 가이드
 
@@ -146,7 +160,3 @@ nest generate guard common/guards/your-guard
 3. 변경사항을 커밋합니다 (`git commit -m 'Add some amazing feature'`)
 4. 브랜치에 푸시합니다 (`git push origin feature/amazing-feature`)
 5. Pull Request를 생성합니다
-
-## 📄 라이센스
-
-ISC 라이센스 하에 배포됩니다.
