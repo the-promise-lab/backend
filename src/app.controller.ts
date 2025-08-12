@@ -38,4 +38,17 @@ export class AppController {
   getHealth(): HealthCheckDto {
     return this.appService.getHealth();
   }
+
+  @Get('debug-sentry')
+  @ApiOperation({ 
+    summary: 'Sentry 테스트',
+    description: 'Sentry 에러 캡처 테스트를 위한 의도적인 에러를 발생시킵니다.'
+  })
+  @ApiResponse({
+    status: 500,
+    description: '테스트용 에러',
+  })
+  getError() {
+    throw new Error("My first Sentry error!");
+  }
 } 
