@@ -15,6 +15,10 @@ coverage/
 .env.production
 .env.development
 
+# Prisma
+prisma/migrations/
+!prisma/migrations/.gitkeep
+
 # IDE
 .vscode/
 .idea/
@@ -60,3 +64,6 @@ dist/
 
 # node-waf configuration
 .lock-wscript
+
+# ssh
+*.pem
