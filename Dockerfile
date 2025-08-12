@@ -8,7 +8,7 @@ RUN apk add --no-cache openssl
 WORKDIR /app
 
 # Install specific npm version
-RUN npm install -g npm@10.8.2
+RUN npm install -g npm@10.9.3
 
 # Copy package files
 COPY package*.json ./
@@ -29,14 +29,14 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine AS production
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma and curl for health check
+RUN apk add --no-cache openssl curl
 
 # Create app directory
 WORKDIR /app
 
 # Install specific npm version
-RUN npm install -g npm@10.8.2
+RUN npm install -g npm@10.9.3
 
 # Copy package files
 COPY package*.json ./
