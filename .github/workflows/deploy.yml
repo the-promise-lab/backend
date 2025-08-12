@@ -1,0 +1,142 @@
+name: Deploy to Docker Hub
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm run test
+
+    - name: Run build
+      run: npm run build
+
+    - name: Get current version
+      id: current_version
+      run: |
+        if git tag -l | grep -q "v"; then
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        else
+          LATEST_TAG="v0.0.0"
+        fi
+        echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+        echo "현재 최신 태그: $LATEST_TAG"
+
+    - name: Calculate new version
+      id: new_version
+      run: |
+        LATEST_TAG="${{ steps.current_version.outputs.latest_tag }}"
+        VERSION=${LATEST_TAG#v}  # Remove 'v' prefix
+
+        IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+        MAJOR=${VERSION_PARTS[0]}
+        MINOR=${VERSION_PARTS[1]:-0}
+        PATCH=${VERSION_PARTS[2]:-0}
+
+        # Determine version bump type
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          BUMP_TYPE="${{ github.event.inputs.version_bump }}"
+        else
+          BUMP_TYPE="patch"
+        fi
+
+        # Calculate new version
+        if [[ "$BUMP_TYPE" == "major" ]]; then
+          NEW_MAJOR=$((MAJOR + 1))
+          NEW_MINOR=0
+          NEW_PATCH=0
+        elif [[ "$BUMP_TYPE" == "minor" ]]; then
+          NEW_MAJOR=$MAJOR
+          NEW_MINOR=$((MINOR + 1))
+          NEW_PATCH=0
+        else
+          NEW_MAJOR=$MAJOR
+          NEW_MINOR=$MINOR
+          NEW_PATCH=$((PATCH + 1))
+        fi
+
+        NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "새 버전: v$NEW_VERSION"
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          thepromise2025/thepromise:latest
+          thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
+        platforms: linux/amd64,linux/arm64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Create Git tag
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git tag -a "v${{ steps.new_version.outputs.new_version }}" -m "Release v${{ steps.new_version.outputs.new_version }}"
+        git push origin "v${{ steps.new_version.outputs.new_version }}"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag_name: v${{ steps.new_version.outputs.new_version }}
+        name: Release v${{ steps.new_version.outputs.new_version }}
+        body: |
+          ## 🚀 새로운 릴리즈: v${{ steps.new_version.outputs.new_version }}
+
+          ### 📦 Docker 이미지
+          ```bash
+          docker pull thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
+          docker pull thepromise2025/thepromise:latest
+          ```
+
+          ### 🔄 변경사항
+          이 릴리즈는 main 브랜치의 최신 변경사항을 포함합니다.
+
+          ### 📋 커밋 정보
+          - 커밋 SHA: ${{ github.sha }}
+          - 작성자: ${{ github.actor }}
+        draft: false
+        prerelease: false
