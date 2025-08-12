@@ -2,7 +2,7 @@ name: PR Build Test
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, feat/ci ]
     types: [opened, synchronize, reopened]
 
 jobs:
