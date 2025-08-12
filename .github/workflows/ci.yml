@@ -1,6 +1,9 @@
-name: Deploy to Docker Hub
+name: CI
 
 on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
   push:
     branches: [ main ]
   workflow_dispatch:
@@ -15,8 +18,11 @@ on:
         - minor
         - major
 
+permissions:
+  contents: write
+
 jobs:
-  deploy:
+  test-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,41 +41,46 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Run linter
+      run: npm run lint
+
     - name: Run tests
       run: npm run test
 
     - name: Run build
       run: npm run build
 
-    - name: Get current version
+    - name: Get current version (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       id: current_version
       run: |
-        if git tag -l | grep -q "v"; then
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        if git tag -l "v*" | grep -q "^v"; then
+          LATEST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "v0.0.0")
         else
           LATEST_TAG="v0.0.0"
         fi
         echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
         echo "현재 최신 태그: $LATEST_TAG"
 
-    - name: Calculate new version
+    - name: Calculate new version (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       id: new_version
       run: |
         LATEST_TAG="${{ steps.current_version.outputs.latest_tag }}"
         VERSION=${LATEST_TAG#v}  # Remove 'v' prefix
-
+        
         IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
         MAJOR=${VERSION_PARTS[0]}
         MINOR=${VERSION_PARTS[1]:-0}
         PATCH=${VERSION_PARTS[2]:-0}
-
+        
         # Determine version bump type
         if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
           BUMP_TYPE="${{ github.event.inputs.version_bump }}"
         else
           BUMP_TYPE="patch"
         fi
-
+        
         # Calculate new version
         if [[ "$BUMP_TYPE" == "major" ]]; then
           NEW_MAJOR=$((MAJOR + 1))
@@ -84,7 +95,7 @@ jobs:
           NEW_MINOR=$MINOR
           NEW_PATCH=$((PATCH + 1))
         fi
-
+        
         NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
         echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "새 버전: v$NEW_VERSION"
@@ -92,13 +103,15 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
+    - name: Login to Docker Hub (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image (main branch)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -106,19 +119,27 @@ jobs:
         tags: |
           thepromise2025/thepromise:latest
           thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Create Git tag
+    - name: Test Docker build (PR only)
+      if: github.event_name == 'pull_request'
+      run: |
+        docker build -t test-image .
+        echo "✅ Docker 이미지 빌드 테스트 성공!"
+
+    - name: Create Git tag (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git tag -a "v${{ steps.new_version.outputs.new_version }}" -m "Release v${{ steps.new_version.outputs.new_version }}"
         git push origin "v${{ steps.new_version.outputs.new_version }}"
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
+    - name: Create GitHub Release (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         tag_name: v${{ steps.new_version.outputs.new_version }}
@@ -126,17 +147,27 @@ jobs:
         body: |
           ## 🚀 새로운 릴리즈: v${{ steps.new_version.outputs.new_version }}
 
-          ### 📦 Docker 이미지
+          ### 📦 Docker 이미지 사용법
           ```bash
-          docker pull thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
-          docker pull thepromise2025/thepromise:latest
+          # 최신 버전
+          docker run -p 3000:3000 thepromise2025/thepromise:latest
+
+          # 특정 버전 (권장)
+          docker run -p 3000:3000 thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
           ```
+
+          ### 🔗 접속 정보
+          - **API**: http://localhost:3000/api
+          - **Health Check**: http://localhost:3000/api/health
+          - **API 문서**: http://localhost:3000/api/docs
 
           ### 🔄 변경사항
           이 릴리즈는 main 브랜치의 최신 변경사항을 포함합니다.
 
-          ### 📋 커밋 정보
-          - 커밋 SHA: ${{ github.sha }}
-          - 작성자: ${{ github.actor }}
+          ### 📋 빌드 정보
+          - **커밋**: ${{ github.sha }}
+          - **작성자**: ${{ github.actor }}
+          - **Node.js**: 22.x
+          - **플랫폼**: linux/amd64
         draft: false
         prerelease: false
