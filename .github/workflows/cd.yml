@@ -1,0 +1,139 @@
+name: CD
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: false
+        default: 'latest'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        port: 22
+        script: |
+          set -e
+          
+          # 배포할 이미지 태그 결정
+          if [ "${{ github.event_name }}" = "release" ]; then
+            IMAGE_TAG="${{ github.event.release.tag_name }}"
+          else
+            IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          fi
+          
+          echo "🚀 배포 시작: thepromise2025/thepromise:$IMAGE_TAG"
+          
+          # Docker가 설치되어 있는지 확인
+          if ! command -v docker &> /dev/null; then
+            echo "❌ Docker가 설치되어 있지 않습니다."
+            exit 1
+          fi
+          
+          # 최신 이미지 Pull
+          echo "📦 Docker 이미지 다운로드 중..."
+          docker pull thepromise2025/thepromise:$IMAGE_TAG
+          
+          # 기존 컨테이너 확인
+          CONTAINER_NAME="thepromise-backend"
+          OLD_CONTAINER_ID=""
+          
+          if docker ps -q -f name=$CONTAINER_NAME > /dev/null 2>&1; then
+            OLD_CONTAINER_ID=$(docker ps -q -f name=$CONTAINER_NAME)
+            echo "🔄 기존 컨테이너 발견: $OLD_CONTAINER_ID"
+          fi
+          
+          # 새 컨테이너 실행 (임시 이름으로)
+          echo "🆕 새 컨테이너 시작 중..."
+          NEW_CONTAINER_ID=$(docker run -d \
+            --name "${CONTAINER_NAME}-new" \
+            -p 3000:3000 \
+            --restart unless-stopped \
+            -e NODE_ENV=production \
+            thepromise2025/thepromise:$IMAGE_TAG)
+          
+          echo "⏳ 새 컨테이너 헬스체크 대기 중..."
+          
+          # 헬스체크 (최대 60초 대기)
+          HEALTH_CHECK_ATTEMPTS=0
+          MAX_ATTEMPTS=20
+          
+          while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+            if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "✅ 헬스체크 성공!"
+              break
+            fi
+            
+            HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
+            echo "⏳ 헬스체크 시도 $HEALTH_CHECK_ATTEMPTS/$MAX_ATTEMPTS..."
+            sleep 3
+          done
+          
+          # 헬스체크 실패시 롤백
+          if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+            echo "❌ 헬스체크 실패! 새 컨테이너를 제거합니다."
+            docker stop $NEW_CONTAINER_ID
+            docker rm $NEW_CONTAINER_ID
+            echo "🔄 이전 컨테이너가 여전히 실행 중입니다."
+            exit 1
+          fi
+          
+          # 기존 컨테이너 정리
+          if [ ! -z "$OLD_CONTAINER_ID" ]; then
+            echo "🧹 기존 컨테이너 정리 중..."
+            docker stop $OLD_CONTAINER_ID
+            docker rm $OLD_CONTAINER_ID
+          fi
+          
+          # 새 컨테이너 이름 변경
+          docker rename "${CONTAINER_NAME}-new" $CONTAINER_NAME
+          
+          # 사용하지 않는 이미지 정리
+          echo "🧹 사용하지 않는 Docker 이미지 정리 중..."
+          docker image prune -f
+          
+          # 배포 완료 정보 출력
+          echo "🎉 배포 완료!"
+          echo "📊 배포 정보:"
+          echo "   - 이미지: thepromise2025/thepromise:$IMAGE_TAG"
+          echo "   - 컨테이너: $NEW_CONTAINER_ID"
+          echo "   - 포트: 3000"
+          echo "   - 상태: $(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME)"
+          
+          # 최종 상태 확인
+          echo "🔍 최종 상태 확인:"
+          docker ps -f name=$CONTAINER_NAME --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+    - name: Verify deployment
+      if: success()
+      run: |
+        echo "✅ 배포가 성공적으로 완료되었습니다!"
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "🏷️ 배포된 버전: ${{ github.event.release.tag_name }}"
+        else
+          echo "🏷️ 배포된 태그: ${{ github.event.inputs.image_tag || 'latest' }}"
+        fi
+        echo "🌐 서비스 URL: http://43.200.235.94:3000"
+        echo "🔍 헬스체크: http://43.200.235.94:3000/api/health"
+
+    - name: Notify deployment failure
+      if: failure()
+      run: |
+        echo "❌ 배포가 실패했습니다!"
+        echo "🔍 로그를 확인하여 문제를 파악하세요."
+        echo "🔄 필요시 이전 버전으로 수동 롤백하세요."
