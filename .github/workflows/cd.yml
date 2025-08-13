@@ -27,6 +27,7 @@ jobs:
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
+        host_fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
         script: |
           set -e
           
@@ -51,17 +52,24 @@ jobs:
           
           # 기존 컨테이너 확인
           CONTAINER_NAME="thepromise-backend"
-          OLD_CONTAINER_ID=""
+          OLD_CONTAINER_ID="$(docker ps -q -f name="^${CONTAINER_NAME}$")"
           
-          if docker ps -q -f name=$CONTAINER_NAME > /dev/null 2>&1; then
-            OLD_CONTAINER_ID=$(docker ps -q -f name=$CONTAINER_NAME)
+          if [ -n "$OLD_CONTAINER_ID" ]; then
             echo "🔄 기존 컨테이너 발견: $OLD_CONTAINER_ID"
           fi
           
-          # 새 컨테이너 실행 (임시 이름으로)
+          # 포트 충돌 방지를 위해 기존 컨테이너를 먼저 정리
+          if [ -n "$OLD_CONTAINER_ID" ]; then
+            echo "🛑 기존 컨테이너 중지 및 제거 중..."
+            docker stop "$OLD_CONTAINER_ID"
+            docker rm "$OLD_CONTAINER_ID"
+            OLD_CONTAINER_ID=""
+          fi
+          
+          # 새 컨테이너 실행
           echo "🆕 새 컨테이너 시작 중..."
           NEW_CONTAINER_ID=$(docker run -d \
-            --name "${CONTAINER_NAME}-new" \
+            --name "$CONTAINER_NAME" \
             -p 3000:3000 \
             --restart unless-stopped \
             -e NODE_ENV=production \
@@ -87,21 +95,15 @@ jobs:
           # 헬스체크 실패시 롤백
           if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
             echo "❌ 헬스체크 실패! 새 컨테이너를 제거합니다."
-            docker stop $NEW_CONTAINER_ID
-            docker rm $NEW_CONTAINER_ID
-            echo "🔄 이전 컨테이너가 여전히 실행 중입니다."
+            echo "🪵 새 컨테이너 로그 (최근 200줄):"
+            docker logs --tail 200 "$NEW_CONTAINER_ID" || true
+            docker stop "$NEW_CONTAINER_ID"
+            docker rm "$NEW_CONTAINER_ID"
+            echo "💥 배포가 실패했습니다. 로그를 확인하세요."
             exit 1
           fi
           
-          # 기존 컨테이너 정리
-          if [ ! -z "$OLD_CONTAINER_ID" ]; then
-            echo "🧹 기존 컨테이너 정리 중..."
-            docker stop $OLD_CONTAINER_ID
-            docker rm $OLD_CONTAINER_ID
-          fi
-          
-          # 새 컨테이너 이름 변경
-          docker rename "${CONTAINER_NAME}-new" $CONTAINER_NAME
+          # 컨테이너가 이미 올바른 이름으로 실행 중
           
           # 사용하지 않는 이미지 정리
           echo "🧹 사용하지 않는 Docker 이미지 정리 중..."
