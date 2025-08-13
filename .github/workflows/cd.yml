@@ -83,13 +83,19 @@ jobs:
           CURRENT_PORT=3000
           NEW_PORT=3001
           
-          # 현재 실행 중인 컨테이너의 포트 확인
-          if docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "$CONTAINER_NAME.*3000"; then
+          # Nginx 설정에서 backend_active 업스트림 포트를 파싱
+          NGINX_CONFIG="/etc/nginx/sites-available/thepromise-backend"
+          if [ -f "$NGINX_CONFIG" ]; then
+            CURRENT_PORT="$(awk '/upstream[[:space:]]+backend_active[[:space:]]*{/,/}/ { if ($1=="server") { if (match($0,/127\.0\.0\.1:([0-9]+)/,m)) { print m[1]; exit } } }' "$NGINX_CONFIG" || true)"
+          fi
+          if [ "$CURRENT_PORT" = "3000" ]; then
+            NEW_PORT=3001
+          elif [ "$CURRENT_PORT" = "3001" ]; then
+            NEW_PORT=3000
+          else
+            echo "⚠️ backend_active 포트를 파악하지 못했습니다. 기본값(3000->3001)을 사용합니다."
             CURRENT_PORT=3000
             NEW_PORT=3001
-          elif docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -q "$CONTAINER_NAME.*3001"; then
-            CURRENT_PORT=3001
-            NEW_PORT=3000
           fi
           
           echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
@@ -98,7 +104,7 @@ jobs:
           echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
           NEW_CONTAINER_ID=$(docker run -d \
             --name "${CONTAINER_NAME}-new" \
-            -p $NEW_PORT:3000 \
+            -p 127.0.0.1:$NEW_PORT:3000 \
             --restart unless-stopped \
             -e NODE_ENV=production \
             thepromise2025/thepromise:$IMAGE_TAG)

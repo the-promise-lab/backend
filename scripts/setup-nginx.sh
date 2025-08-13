@@ -58,11 +58,13 @@ systemctl enable nginx
 
 # 5. 방화벽 설정
 log_info "🔥 방화벽 설정 중..."
-ufw --force enable
+# SSH 잠금 방지를 위해 허용 규칙을 먼저 설정
 ufw allow ssh
 ufw allow 'Nginx Full'
-ufw allow 3000  # 백엔드 컨테이너 포트
-ufw allow 3001  # 블루/그린 배포용 포트
+# 내부 바인딩(127.0.0.1)로 운영하므로 3000/3001 포트는 외부 노출 불필요
+# ufw allow 3000  # 백엔드 컨테이너 포트
+# ufw allow 3001  # 블루/그린 배포용 포트
+ufw --force enable
 
 log_success "✅ 방화벽 설정 완료"
 ufw status
@@ -82,14 +84,9 @@ upstream backend_active {
     server 127.0.0.1:3000 fail_timeout=5s max_fails=3;
 }
 
-# 블루/그린 배포용 백엔드 설정
+# 블루/그린 배포용 백엔드 설정 (참조용)
 upstream backend_new {
     server 127.0.0.1:3001 fail_timeout=5s max_fails=3;
-}
-
-# 현재 활성 업스트림을 가리키는 변수
-map $request_uri $backend {
-    default backend_active;
 }
 
 server {
@@ -184,7 +181,7 @@ log_info "🔄 백엔드를 포트 $OLD_PORT에서 $NEW_PORT로 전환합니다.
 # 새 백엔드 헬스체크
 log_info "🏥 새 백엔드 헬스체크 중... (포트: $NEW_PORT)"
 for i in {1..30}; do
-    if curl -s --max-time 3 "http://127.0.0.1:$NEW_PORT/api/health" > /dev/null; then
+    if curl -fsS --max-time 3 "http://127.0.0.1:$NEW_PORT/api/health" > /dev/null; then
         log_info "✅ 새 백엔드 헬스체크 성공!"
         break
     fi
@@ -198,14 +195,15 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Nginx 설정 업데이트
+# Nginx 설정 업데이트 (backend_active 블록만)
 log_info "⚙️ Nginx 설정 업데이트 중..."
-sed -i "s/server 127\.0\.0\.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/" "$NGINX_CONFIG"
+# backend_active 블록 내부에서만 포트 교체
+sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/" "$NGINX_CONFIG"
 
 # Nginx 설정 테스트
 if ! nginx -t; then
     log_error "❌ Nginx 설정 테스트 실패! 롤백합니다."
-    sed -i "s/server 127\.0\.0\.1:$NEW_PORT/server 127.0.0.1:$OLD_PORT/" "$NGINX_CONFIG"
+    sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$NEW_PORT/server 127.0.0.1:$OLD_PORT/" "$NGINX_CONFIG"
     exit 1
 fi
 
@@ -215,7 +213,7 @@ systemctl reload nginx
 
 # 최종 확인
 sleep 2
-if curl -s --max-time 5 "http://127.0.0.1/api/health" > /dev/null; then
+if curl -fsS --max-time 5 "http://127.0.0.1/api/health" > /dev/null; then
     log_info "🎉 백엔드 전환 완료! 새 포트: $NEW_PORT"
 else
     log_error "❌ 전환 후 헬스체크 실패!"
