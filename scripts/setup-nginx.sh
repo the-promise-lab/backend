@@ -53,8 +53,8 @@ log_success "✅ Nginx 설치 완료: $(nginx -v 2>&1)"
 
 # 4. Nginx 서비스 시작 및 부팅시 자동 시작 설정
 log_info "🔄 Nginx 서비스 설정 중..."
-systemctl start nginx
-systemctl enable nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
 
 # 5. 방화벽 설정 (AWS Security Groups 사용으로 생략)
 log_info "🔥 AWS Security Groups를 통해 방화벽이 관리됩니다"
@@ -136,7 +136,7 @@ ln -sf /etc/nginx/sites-available/thepromise-backend /etc/nginx/sites-enabled/
 
 # 9. Nginx 설정 테스트
 log_info "🧪 Nginx 설정 테스트 중..."
-if nginx -t; then
+if sudo nginx -t; then
     log_success "✅ Nginx 설정이 올바릅니다."
 else
     log_error "❌ Nginx 설정에 오류가 있습니다."
@@ -189,18 +189,18 @@ done
 # Nginx 설정 업데이트 (backend_active 블록만)
 log_info "⚙️ Nginx 설정 업데이트 중..."
 # backend_active 블록 내부에서만 포트 교체
-sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/" "$NGINX_CONFIG"
+sudo sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/" "$NGINX_CONFIG"
 
 # Nginx 설정 테스트
-if ! nginx -t; then
+if ! sudo nginx -t; then
     log_error "❌ Nginx 설정 테스트 실패! 롤백합니다."
-    sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$NEW_PORT/server 127.0.0.1:$OLD_PORT/" "$NGINX_CONFIG"
+    sudo sed -i "/upstream[[:space:]]\+backend_active[[:space:]]*{/,/}/ s/server 127\.0\.0\.1:$NEW_PORT/server 127.0.0.1:$OLD_PORT/" "$NGINX_CONFIG"
     exit 1
 fi
 
 # Nginx 리로드
 log_info "🔄 Nginx 리로드 중..."
-systemctl reload nginx
+sudo systemctl reload nginx
 
 # 최종 확인
 sleep 2
@@ -236,11 +236,11 @@ EOF
 
 # 12. Nginx 리로드
 log_info "🔄 Nginx 리로드 중..."
-systemctl reload nginx
+sudo systemctl reload nginx
 
 # 13. 서비스 상태 확인
 log_info "🔍 서비스 상태 확인 중..."
-systemctl status nginx --no-pager -l
+sudo systemctl status nginx --no-pager -l
 
 # 14. 완료 메시지 및 테스트 정보
 log_success "🎉 Nginx 무중단 배포 환경 설정이 완료되었습니다!"
