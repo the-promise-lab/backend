@@ -24,18 +24,15 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
     - name: Deploy to EC2
-      # Pin to immutable commit SHA for v1.0.3 for security
-      uses: appleboy/ssh-action@029f5b4c5fcc5c4b1b331a1c82d9ca8c5c7aae8d
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_KEY }}
         port: 22
-        host_fingerprint: ${{ secrets.EC2_HOST_FINGERPRINT }}
         script: |
           set -Eeuo pipefail
           IFS=$'\n\t'
