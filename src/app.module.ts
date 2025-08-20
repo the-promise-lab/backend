@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
+import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
       useClass: SentryGlobalFilter,
     },
     AppService,
+    PrismaService,
   ],
 })
 export class AppModule {} 
