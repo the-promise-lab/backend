@@ -86,21 +86,35 @@ jobs:
           echo "📋 다운로드된 이미지 확인:"
           docker images thepromise2025/thepromise
           
-          # 기존 컨테이너 확인 (실행 중이거나 중지된 컨테이너 모두 포함)
+          # 기존 컨테이너 정리 (충돌 방지)
           CONTAINER_NAME="thepromise-backend"
-          OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
+          echo "🧹 기존 컨테이너 정리 중..."
           
+          # 메인 컨테이너 정리
+          OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
           if [ -n "$OLD_CONTAINER_ID" ]; then
-            echo "🔄 기존 컨테이너 발견: $OLD_CONTAINER_ID"
-            # 실행 중인지 확인 후 중지
+            echo "🔄 기존 메인 컨테이너 발견: $OLD_CONTAINER_ID"
             if [ "$(docker inspect -f '{{.State.Running}}' "$OLD_CONTAINER_ID" 2>/dev/null)" = "true" ]; then
               echo "🛑 실행 중인 컨테이너 중지 중..."
               docker stop "$OLD_CONTAINER_ID"
             fi
-            echo "🗑️ 기존 컨테이너 제거 중..."
+            echo "🗑️ 기존 메인 컨테이너 제거 중..."
             docker rm "$OLD_CONTAINER_ID"
-            OLD_CONTAINER_ID=""
           fi
+          
+          # 임시(-new) 컨테이너 정리 (이전 실패 배포의 잔여물)
+          NEW_CONTAINER_ID_OLD="$(docker ps -aq -f name="^${CONTAINER_NAME}-new$")"
+          if [ -n "$NEW_CONTAINER_ID_OLD" ]; then
+            echo "🔄 이전 실패 배포의 임시 컨테이너 발견: $NEW_CONTAINER_ID_OLD"
+            if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID_OLD" 2>/dev/null)" = "true" ]; then
+              echo "🛑 임시 컨테이너 중지 중..."
+              docker stop "$NEW_CONTAINER_ID_OLD"
+            fi
+            echo "🗑️ 임시 컨테이너 제거 중..."
+            docker rm "$NEW_CONTAINER_ID_OLD"
+          fi
+          
+          echo "✅ 컨테이너 정리 완료"
           
           # Blue/Green 배포를 위한 포트 결정
           CURRENT_PORT=3000
