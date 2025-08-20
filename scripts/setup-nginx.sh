@@ -46,7 +46,7 @@ apt upgrade -y
 
 # 2. 필수 패키지 설치
 log_info "🔧 필수 패키지 설치 중..."
-apt install -y nginx curl ufw software-properties-common
+apt install -y nginx curl software-properties-common
 
 # 3. Nginx 버전 확인
 log_success "✅ Nginx 설치 완료: $(nginx -v 2>&1)"
@@ -56,18 +56,9 @@ log_info "🔄 Nginx 서비스 설정 중..."
 systemctl start nginx
 systemctl enable nginx
 
-# 5. 방화벽 설정
-log_info "🔥 방화벽 설정 중..."
-# SSH 잠금 방지를 위해 허용 규칙을 먼저 설정
-ufw allow ssh
-ufw allow 'Nginx Full'
-# 내부 바인딩(127.0.0.1)로 운영하므로 3000/3001 포트는 외부 노출 불필요
-# ufw allow 3000  # 백엔드 컨테이너 포트
-# ufw allow 3001  # 블루/그린 배포용 포트
-ufw --force enable
-
-log_success "✅ 방화벽 설정 완료"
-ufw status
+# 5. 방화벽 설정 (AWS Security Groups 사용으로 생략)
+log_info "🔥 AWS Security Groups를 통해 방화벽이 관리됩니다"
+log_success "✅ 방화벽 설정 생략 (AWS Security Groups 사용)"
 
 # 6. 기본 Nginx 설정 백업
 log_info "💾 기본 Nginx 설정 백업 중..."
@@ -264,7 +255,6 @@ echo ""
 echo "🧪 테스트 명령어:"
 echo "  - Nginx 상태: sudo systemctl status nginx"
 echo "  - 설정 테스트: sudo nginx -t"
-echo "  - 방화벽 상태: sudo ufw status"
 echo "  - 헬스체크: curl http://localhost/api/health"
 echo ""
 echo "🔄 배포 스크립트 사용법:"
