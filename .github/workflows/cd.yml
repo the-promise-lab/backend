@@ -139,15 +139,24 @@ jobs:
           
           # Nginx를 통한 트래픽 전환
           echo "🔄 Nginx 트래픽 전환 중..."
-          /opt/thepromise/scripts/switch-backend.sh $NEW_PORT $CURRENT_PORT
-          
-          # 전환 성공 후 기존 컨테이너 제거
-          if [ -n "$OLD_CONTAINER_ID" ] && [ "$OLD_CONTAINER_ID" != "$NEW_CONTAINER_ID" ]; then
-            echo "🧹 이전 컨테이너 제거 중..."
-            docker stop "$OLD_CONTAINER_ID" 2>/dev/null || true
-            docker rm "$OLD_CONTAINER_ID" 2>/dev/null || true
+          SWITCH_SCRIPT="/opt/thepromise/scripts/switch-backend.sh"
+          if [ ! -x "$SWITCH_SCRIPT" ]; then
+            echo "❌ 스크립트를 찾을 수 없거나 실행 권한이 없습니다: $SWITCH_SCRIPT"
+            echo "   /opt/thepromise/scripts 디렉토리에 switch-backend.sh 배포 여부를 확인하세요."
+            exit 1
           fi
+          "$SWITCH_SCRIPT" "$NEW_PORT" "$CURRENT_PORT"
           
+          # 전환 성공 후 기존 컨테이너 제거 (이름으로 재탐색하여 신뢰성 향상)
+          EXISTING_CANONICAL_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
+          if [ -n "$EXISTING_CANONICAL_ID" ] && [ "$EXISTING_CANONICAL_ID" != "$NEW_CONTAINER_ID" ]; then
+            echo "🧹 이전 컨테이너 제거 중..."
+            if [ "$(docker inspect -f '{{.State.Running}}' "$EXISTING_CANONICAL_ID" 2>/dev/null)" = "true" ]; then
+              docker stop "$EXISTING_CANONICAL_ID" 2>/dev/null || true
+            fi
+            docker rm "$EXISTING_CANONICAL_ID" 2>/dev/null || true
+          fi
+
           # 새 컨테이너 이름 변경
           docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
           
