@@ -3,6 +3,9 @@ name: CD
 on:
   release:
     types: [published]
+  push:
+    branches:
+      - feat/cd # 배포 테스트 브랜치
   workflow_dispatch:
     inputs:
       image_tag:
