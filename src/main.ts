@@ -7,10 +7,13 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  app.use(cookieParser());
+
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
@@ -19,7 +22,10 @@ async function bootstrap() {
   }));
   
   // Enable CORS
-  app.enableCors();
+  app.enableCors({
+    origin: 'http://localhost:3001', // 프론트엔드 서버의 출처
+    credentials: true, // 쿠키를 포함한 요청을 허용
+  });
   
   // Global prefix
   app.setGlobalPrefix('api');
