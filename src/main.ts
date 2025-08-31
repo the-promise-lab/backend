@@ -1,26 +1,29 @@
 // IMPORTANT: Make sure to import `instrument.ts` at the top of your file.
 // If you're using CommonJS (CJS) syntax, use `require("./instrument.ts");`
-import "./instrument";
+import './instrument';
 
 // All other imports below
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   app.use(cookieParser());
 
+
   // Global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
-  
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
   // Enable CORS
   app.enableCors({
     origin: 'http://localhost:3001', // 프론트엔드 서버의 출처
@@ -29,7 +32,7 @@ async function bootstrap() {
   
   // Global prefix
   app.setGlobalPrefix('api');
-  
+
   // Swagger configuration
   const config = new DocumentBuilder()
     .setTitle('Backend API')
@@ -48,16 +51,24 @@ async function bootstrap() {
       'JWT-auth',
     )
     .build();
-  
+
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
     },
   });
-  
+
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  
+
+  Logger.log(
+    `🚀 Application is running on: http://localhost:${port}/api`,
+    'Bootstrap',
+  );
+  Logger.log(
+    `📚 Swagger API docs available at: http://localhost:${port}/api/docs`,
+    'Bootstrap',
+  );
 }
-bootstrap(); 
+bootstrap();
