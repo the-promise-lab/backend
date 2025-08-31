@@ -16,23 +16,24 @@ export class AuthController {
 
   @Get(':provider')
   @UseGuards(AuthGuard('kakao')) // 우선 'kakao'만 명시
-  async socialLogin(@Param('provider') provider: string) {}
+  async socialLogin(@Param('provider') provider: string) {
+    provider = provider.toLowerCase();
+    if (provider !== 'kakao') {
+      throw new Error(`Unsupported provider: ${provider}`);
+    }
+  }
 
   @Get(':provider/callback')
   @UseGuards(AuthGuard('kakao'))
   async socialLoginCallback(@Req() req, @Res() res: Response) {
-    console.log('[Auth Callback] 1. User profile from Kakao:', req.user);
     const userProfile = req.user as any;
 
     const user = await this.authService.findOrCreateUser(userProfile);
-    console.log('[Auth Callback] 2. User from DB:', user);
 
     const { accessToken } = this.authService.login(user);
-    console.log('[Auth Callback] 3. Generated Access Token:', accessToken);
 
     res.cookie('accessToken', accessToken, { httpOnly: true });
 
-    console.log('[Auth Callback] 4. Redirecting to frontend...');
     // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
     res.redirect('http://localhost:3001'); // 예시 URL
   }
