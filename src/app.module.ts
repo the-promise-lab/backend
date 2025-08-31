@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { PrismaService } from './prisma/prisma.service';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PrismaService } from './prisma/prisma.service';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
