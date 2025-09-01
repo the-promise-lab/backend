@@ -137,6 +137,8 @@ jobs:
           thepromise2025/thepromise:latest
           thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
         platforms: linux/amd64
+        build-args: |
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
