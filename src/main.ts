@@ -26,7 +26,7 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: 'http://localhost:3001', // 프론트엔드 서버의 출처
+    origin: 'http://localhost:3000', // 프론트엔드 서버의 출처
     credentials: true, // 쿠키를 포함한 요청을 허용
   });
   
