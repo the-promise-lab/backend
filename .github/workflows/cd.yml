@@ -142,7 +142,6 @@ jobs:
           echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
           NEW_CONTAINER_ID=$(docker run -d \
             --name "${CONTAINER_NAME}-new" \
-            --env-file ./.env \
             -p 127.0.0.1:$NEW_PORT:3000 \
             --restart unless-stopped \
             --env-file /tmp/.env \
