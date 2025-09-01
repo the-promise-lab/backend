@@ -131,10 +131,15 @@ jobs:
           
           echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
           
+          # .env 파일 생성
+          echo "🔑 프로덕션 .env 파일 생성..."
+          echo "${{ secrets.ENV_FILE_PRODUCTION }}" > .env
+          
           # 새 컨테이너 실행 (임시 이름으로)
           echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
           NEW_CONTAINER_ID=$(docker run -d \
             --name "${CONTAINER_NAME}-new" \
+            --env-file ./.env \
             -p 127.0.0.1:$NEW_PORT:3000 \
             --restart unless-stopped \
             -e NODE_ENV=production \
