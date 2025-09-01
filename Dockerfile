@@ -19,6 +19,9 @@ RUN npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
+# Set DATABASE_URL as an argument and environment variable                                                                                         │
+ARG DATABASE_URL                                                                                                                                   │
+ENV DATABASE_URL=${DATABASE_URL}   
 
 # Generate Prisma client
 RUN npx prisma generate
