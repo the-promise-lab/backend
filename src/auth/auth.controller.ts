@@ -35,7 +35,7 @@ export class AuthController {
     res.cookie('accessToken', accessToken, { httpOnly: true });
 
     // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
-    res.redirect('http://localhost:3001'); // 예시 URL
+    res.redirect(process.env.FRONTEND_URL); // 예시 URL
   }
 
   @Post('logout')
