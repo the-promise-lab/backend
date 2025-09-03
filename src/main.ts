@@ -25,6 +25,7 @@ async function bootstrap() {
         maxAge: 3600000, // 1 hour
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        sameSite: 'lax', // OAuth 리디렉션 후 세션 쿠키가 전송되도록 설정
       },
     }),
   );
