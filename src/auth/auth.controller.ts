@@ -1,11 +1,18 @@
-import { Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Get('profile')
   @UseGuards(AuthGuard('jwt'))
@@ -14,28 +21,47 @@ export class AuthController {
     return req.user;
   }
 
-  @Get(':provider')
-  @UseGuards(AuthGuard('kakao')) // 우선 'kakao'만 명시
-  async socialLogin(@Param('provider') provider: string) {
-    provider = provider.toLowerCase();
-    if (provider !== 'kakao') {
-      throw new Error(`Unsupported provider: ${provider}`);
-    }
+  @Get('kakao')
+  async kakaoLogin(@Req() req: Request, @Res() res: Response) {
+    const state = crypto.randomBytes(16).toString('hex');
+    (req.session as any).oauthState = state; // Store state in session
+
+    const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
+    const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
+
+    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}&state=${state}`;
+    res.redirect(kakaoAuthUrl);
   }
 
-  @Get(':provider/callback')
+  @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
-  async socialLoginCallback(@Req() req, @Res() res: Response) {
-    const userProfile = req.user as any;
+  async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
+    const { state } = req.query;
+    const storedState = (req.session as any).oauthState;
 
-    const user = await this.authService.findOrCreateUser(userProfile);
+    // State validation
+    if (!state || state !== storedState) {
+      this.logger.error('State mismatch or missing:', { received: state, stored: storedState });
+      throw new UnauthorizedException('Invalid state parameter');
+    }
 
-    const { accessToken } = this.authService.login(user);
+    // Invalidate state to prevent replay attacks
+    delete (req.session as any).oauthState;
 
-    res.cookie('accessToken', accessToken, { httpOnly: true });
+    const userProfile = (req as any).user; // req.user is set by Passport
 
-    // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
-    res.redirect(process.env.FRONTEND_URL); // 예시 URL
+    try {
+      const user = await this.authService.findOrCreateUserFromSocialProfile(userProfile);
+      const { accessToken } = this.authService.login(user);
+
+      res.cookie('accessToken', accessToken, { httpOnly: true });
+
+      // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
+      res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
+    } catch (e) {
+      this.logger.error('Error during user processing or token generation:', e);
+      res.redirect(`${this.configService.get('FRONTEND_URL')}/error?message=Login failed`);
+    }
   }
 
   @Post('logout')

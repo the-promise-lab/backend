@@ -1,30 +1,41 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy } from 'passport-kakao';
+import { Profile, Strategy } from 'passport-kakao';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from './auth.service';
 import { SocialProfile } from './social-profile.interface';
 
 @Injectable()
 export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
-  constructor() {
+  constructor(
+    private configService: ConfigService,
+    private authService: AuthService,
+  ) {
     super({
-      clientID: process.env.KAKAO_CLIENT_ID,
-      clientSecret: process.env.KAKAO_CLIENT_SECRET, // 카카오 개발자 센터에서 발급받은 Client Secret
-      callbackURL: process.env.KAKAO_CALLBACK_URL,
+      clientID: configService.get('KAKAO_CLIENT_ID'),
+      clientSecret: configService.get('KAKAO_CLIENT_SECRET'),
+      callbackURL: configService.get('KAKAO_CALLBACK_URL'),
     });
   }
 
   async validate(
     accessToken: string,
     refreshToken: string,
-    profile: any,
-    done: any,
+    profile: Profile,
+    done: (err?: Error, user?: any, info?: any) => void,
   ): Promise<any> {
-    const userProfile: SocialProfile = {
-      snsId: String(profile.id),
+    const socialProfile: SocialProfile = {
       provider: 'kakao',
+      snsId: String(profile.id),
       email: profile._json.kakao_account?.email || null,
       name: profile.displayName,
     };
-    done(null, userProfile);
+
+    try {
+      const user = await this.authService.findOrCreateUserFromSocialProfile(socialProfile);
+      done(null, user);
+    } catch (err) {
+      done(err, false);
+    }
   }
 }
