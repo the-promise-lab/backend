@@ -7,6 +7,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
+import { HttpModule } from '@nestjs/axios'; // Import HttpModule
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { PrismaService } from '../prisma/prisma.service';
         },
       }),
     }),
+    HttpModule, // Add HttpModule here
   ],
   controllers: [AuthController],
   providers: [AuthService, KakaoStrategy, JwtStrategy, PrismaService],

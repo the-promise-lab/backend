@@ -1,36 +1,76 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialProfile } from './social-profile.interface';
 import { JwtService } from '@nestjs/jwt';
+import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class AuthService {
+  private readonly userCreationCache = new Map<string, { status: 'PROCESSING' | 'COMPLETED', timestamp: number }>();
+  private readonly CACHE_EXPIRATION_MS = 5 * 1000; // 5 seconds
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly httpService: HttpService,
   ) {}
 
-  async findOrCreateUser(profile: SocialProfile): Promise<any> {
-    let user = await this.prisma.user.findUnique({
-      where: {
-        snsId_provider: {
-          snsId: profile.snsId,
-          provider: profile.provider,
-        },
-      },
-    });
+  async findOrCreateUserFromSocialProfile(profile: SocialProfile): Promise<any> {
+    const cacheKey = `${profile.provider}-${profile.snsId}`;
+    const cachedStatus = this.userCreationCache.get(cacheKey);
 
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          snsId: profile.snsId,
-          provider: profile.provider,
-          email: profile.email,
-          name: profile.name,
+    if (cachedStatus) {
+      if (cachedStatus.status === 'COMPLETED') {
+        console.log(`User for ${cacheKey} already processed successfully.`);
+        // Retrieve user from DB if needed, or assume it's already in DB
+        return this.prisma.user.findUnique({
+          where: {
+            snsId_provider: {
+              snsId: profile.snsId,
+              provider: profile.provider,
+            },
+          },
+        });
+      }
+      if (cachedStatus.status === 'PROCESSING' && (Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS)) {
+        console.log(`User for ${cacheKey} is currently being processed.`);
+        throw new ConflictException('User creation/lookup already in progress.');
+      }
+    }
+
+    // Mark as processing
+    this.userCreationCache.set(cacheKey, { status: 'PROCESSING', timestamp: Date.now() });
+
+    try {
+      let user = await this.prisma.user.findUnique({
+        where: {
+          snsId_provider: {
+            snsId: profile.snsId,
+            provider: profile.provider,
+          },
         },
       });
+
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: {
+            snsId: profile.snsId,
+            provider: profile.provider,
+            email: profile.email,
+            name: profile.name,
+          },
+        });
+      }
+
+      // Mark as completed
+      this.userCreationCache.set(cacheKey, { status: 'COMPLETED', timestamp: Date.now() });
+      return user;
+    } catch (error) {
+      console.error(`Error processing user for ${cacheKey}:`, error);
+      // Remove from cache on error to allow retry
+      this.userCreationCache.delete(cacheKey);
+      throw error;
     }
-    return user;
   }
 
   login(user: any) {
