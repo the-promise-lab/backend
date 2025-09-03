@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Req, Res, UseGuards, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
@@ -7,6 +7,8 @@ import * as crypto from 'crypto';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
@@ -32,7 +34,6 @@ export class AuthController {
   }
 
   @Get('kakao/callback')
-  @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
   async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
     const { state } = req.query;
@@ -40,7 +41,7 @@ export class AuthController {
 
     // State validation
     if (!state || state !== storedState) {
-      console.error('State mismatch or missing:', { received: state, stored: storedState });
+      this.logger.error('State mismatch or missing:', { received: state, stored: storedState });
       throw new UnauthorizedException('Invalid state parameter');
     }
 
@@ -58,7 +59,7 @@ export class AuthController {
       // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
       res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
     } catch (e) {
-      console.error('Error during user processing or token generation:', e);
+      this.logger.error('Error during user processing or token generation:', e);
       res.redirect(`${this.configService.get('FRONTEND_URL')}/error?message=Login failed`);
     }
   }

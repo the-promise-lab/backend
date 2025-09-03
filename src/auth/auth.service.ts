@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialProfile } from './social-profile.interface';
 import { JwtService } from '@nestjs/jwt';
@@ -6,6 +6,7 @@ import { HttpService } from '@nestjs/axios';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly userCreationCache = new Map<string, { status: 'PROCESSING' | 'COMPLETED', timestamp: number }>();
   private readonly CACHE_EXPIRATION_MS = 5 * 1000; // 5 seconds
 
@@ -21,7 +22,7 @@ export class AuthService {
 
     if (cachedStatus) {
       if (cachedStatus.status === 'COMPLETED') {
-        console.log(`User for ${cacheKey} already processed successfully.`);
+        this.logger.log(`User for ${cacheKey} already processed successfully.`);
         // Retrieve user from DB if needed, or assume it's already in DB
         return this.prisma.user.findUnique({
           where: {
@@ -33,7 +34,7 @@ export class AuthService {
         });
       }
       if (cachedStatus.status === 'PROCESSING' && (Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS)) {
-        console.log(`User for ${cacheKey} is currently being processed.`);
+        this.logger.log(`User for ${cacheKey} is currently being processed.`);
         throw new ConflictException('User creation/lookup already in progress.');
       }
     }
@@ -66,7 +67,7 @@ export class AuthService {
       this.userCreationCache.set(cacheKey, { status: 'COMPLETED', timestamp: Date.now() });
       return user;
     } catch (error) {
-      console.error(`Error processing user for ${cacheKey}:`, error);
+      this.logger.error(`Error processing user for ${cacheKey}:`, error);
       // Remove from cache on error to allow retry
       this.userCreationCache.delete(cacheKey);
       throw error;
