@@ -22,39 +22,26 @@ export class AuthController {
   }
 
   @Get('kakao')
-  async kakaoLogin(@Req() req: Request, @Res() res: Response) {
-    const state = crypto.randomBytes(16).toString('hex');
-    (req.session as any).oauthState = state; // Store state in session
-
-    const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
-    const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
-
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}&state=${state}`;
-    res.redirect(kakaoAuthUrl);
-  }
+  @UseGuards(AuthGuard('kakao'))
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
+  async kakaoLogin() {}
 
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
   async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
-    const { state } = req.query;
-    const storedState = (req.session as any).oauthState;
-
-    // State validation
-    if (!state || state !== storedState) {
-      this.logger.error('State mismatch or missing:', { received: state, stored: storedState });
-      throw new UnauthorizedException('Invalid state parameter');
-    }
-
-    // Invalidate state to prevent replay attacks
-    delete (req.session as any).oauthState;
-
-    const userProfile = (req as any).user; // req.user is set by Passport
+    // Passport's AuthGuard already validated the state and attached the user profile.
+    const userProfile = (req as any).user;
 
     try {
       const user = await this.authService.findOrCreateUserFromSocialProfile(userProfile);
       const { accessToken } = this.authService.login(user);
 
-      res.cookie('accessToken', accessToken, { httpOnly: true });
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        path: '/',
+        secure: true, // HTTPS is required for cross-site cookies
+        sameSite: 'none', // Allow cookie to be set on cross-site requests
+      });
 
       // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
       res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
