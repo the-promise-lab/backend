@@ -4,6 +4,7 @@ import './instrument';
 
 // All other imports below
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -11,7 +12,11 @@ import * as cookieParser from 'cookie-parser';
 import * as session from 'express-session'; // Import express-session
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Trust proxy headers (e.g., for Nginx)
+  app.set('trust proxy', 1);
+
 
   app.use(cookieParser());
 
@@ -25,6 +30,7 @@ async function bootstrap() {
         maxAge: 3600000, // 1 hour
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        sameSite: 'lax', // OAuth 리디렉션 후 세션 쿠키가 전송되도록 설정
       },
     }),
   );
