@@ -32,7 +32,8 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
     };
 
     try {
-      const user = await this.authService.findOrCreateUserFromSocialProfile(socialProfile);
+      const user =
+        await this.authService.findOrCreateUserFromSocialProfile(socialProfile);
       done(null, user);
     } catch (err) {
       done(err, false);

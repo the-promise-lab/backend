@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Req, Res, UseGuards, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
@@ -41,7 +50,10 @@ export class AuthController {
 
     // State validation
     if (!state || state !== storedState) {
-      this.logger.error('State mismatch or missing:', { received: state, stored: storedState });
+      this.logger.error('State mismatch or missing:', {
+        received: state,
+        stored: storedState,
+      });
       throw new UnauthorizedException('Invalid state parameter');
     }
 
@@ -51,7 +63,8 @@ export class AuthController {
     const userProfile = (req as any).user; // req.user is set by Passport
 
     try {
-      const user = await this.authService.findOrCreateUserFromSocialProfile(userProfile);
+      const user =
+        await this.authService.findOrCreateUserFromSocialProfile(userProfile);
       const { accessToken } = this.authService.login(user);
 
       res.cookie('accessToken', accessToken, { httpOnly: true });
@@ -60,7 +73,9 @@ export class AuthController {
       res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
     } catch (e) {
       this.logger.error('Error during user processing or token generation:', e);
-      res.redirect(`${this.configService.get('FRONTEND_URL')}/error?message=Login failed`);
+      res.redirect(
+        `${this.configService.get('FRONTEND_URL')}/error?message=Login failed`,
+      );
     }
   }
 

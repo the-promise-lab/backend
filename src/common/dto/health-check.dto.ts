@@ -14,4 +14,4 @@ export class HealthCheckDto {
     format: 'date-time',
   })
   timestamp: string;
-} 
+}
