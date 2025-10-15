@@ -7,7 +7,10 @@ import { HttpService } from '@nestjs/axios';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly userCreationCache = new Map<string, { status: 'PROCESSING' | 'COMPLETED', timestamp: number }>();
+  private readonly userCreationCache = new Map<
+    string,
+    { status: 'PROCESSING' | 'COMPLETED'; timestamp: number }
+  >();
   private readonly CACHE_EXPIRATION_MS = 5 * 1000; // 5 seconds
 
   constructor(
@@ -16,7 +19,9 @@ export class AuthService {
     private readonly httpService: HttpService,
   ) {}
 
-  async findOrCreateUserFromSocialProfile(profile: SocialProfile): Promise<any> {
+  async findOrCreateUserFromSocialProfile(
+    profile: SocialProfile,
+  ): Promise<any> {
     const cacheKey = `${profile.provider}-${profile.snsId}`;
     const cachedStatus = this.userCreationCache.get(cacheKey);
 
@@ -33,14 +38,22 @@ export class AuthService {
           },
         });
       }
-      if (cachedStatus.status === 'PROCESSING' && (Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS)) {
+      if (
+        cachedStatus.status === 'PROCESSING' &&
+        Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS
+      ) {
         this.logger.log(`User for ${cacheKey} is currently being processed.`);
-        throw new ConflictException('User creation/lookup already in progress.');
+        throw new ConflictException(
+          'User creation/lookup already in progress.',
+        );
       }
     }
 
     // Mark as processing
-    this.userCreationCache.set(cacheKey, { status: 'PROCESSING', timestamp: Date.now() });
+    this.userCreationCache.set(cacheKey, {
+      status: 'PROCESSING',
+      timestamp: Date.now(),
+    });
 
     try {
       let user = await this.prisma.user.findUnique({
@@ -64,7 +77,10 @@ export class AuthService {
       }
 
       // Mark as completed
-      this.userCreationCache.set(cacheKey, { status: 'COMPLETED', timestamp: Date.now() });
+      this.userCreationCache.set(cacheKey, {
+        status: 'COMPLETED',
+        timestamp: Date.now(),
+      });
       return user;
     } catch (error) {
       this.logger.error(`Error processing user for ${cacheKey}:`, error);

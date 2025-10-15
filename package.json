@@ -100,8 +100,10 @@
     "typescript": "^5.8.3"
   },
   "lint-staged": {
-    "**/*.ts": [
-      "prettier --write",
+    "**/*": [
+      "prettier --write --ignore-unknown"
+    ],
+    "**/*.{ts,js}": [
       "eslint --fix"
     ]
   }

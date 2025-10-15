@@ -26,4 +26,4 @@ import { AuthModule } from './auth/auth.module';
     PrismaService,
   ],
 })
-export class AppModule {} 
+export class AppModule {}
