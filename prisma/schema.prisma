@@ -19,7 +19,151 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  gameSessions GameSession[]
+
   // 소셜 로그인 사용자를 위한 복합 고유 키
   @@unique([snsId, provider])
   @@map("users")
+}
+
+model GameSession {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  currentActId Int?
+  createdAt    DateTime @default(now())
+
+  user                User                 @relation(fields: [userId], references: [id])
+  currentAct          Act?                 @relation(fields: [currentActId], references: [id])
+  inventories         Inventory[]
+  playingCharacterSet PlayingCharacterSet?
+
+  @@map("game_sessions")
+}
+
+model Inventory {
+  id            Int @id @default(autoincrement())
+  gameSessionId Int
+  bagId         Int?
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id])
+  bag         Bag?        @relation(fields: [bagId], references: [id])
+  slots       Slot[]
+
+  @@map("inventories")
+}
+
+model Item {
+  id             Int      @id @default(autoincrement())
+  name           String
+  description    String?
+  storeSection   StoreSection?
+  isConsumable   Boolean? @map("is_consumavle")
+  capacityCost   Int?
+  itemCategoryId Int?
+  necessity      Int?     @map("필요도")
+
+  itemCategory ItemCategory? @relation(fields: [itemCategoryId], references: [id])
+  slots        Slot[]
+
+  @@map("items")
+}
+
+model PlayingCharacterSet {
+  id               Int    @id @default(autoincrement())
+  gameSessionId    Int    @unique
+  characterGroupId Int?
+
+  gameSession      GameSession       @relation(fields: [gameSessionId], references: [id])
+  characterGroup   CharacterGroup?   @relation(fields: [characterGroupId], references: [id])
+  playingCharacter PlayingCharacter[]
+
+  @@map("playing_character_sets")
+}
+
+model Slot {
+  id       Int @id @default(autoincrement())
+  invId    Int
+  itemId   Int
+  quantity Int
+
+  inventory Inventory @relation(fields: [invId], references: [id])
+  item      Item      @relation(fields: [itemId], references: [id])
+
+  @@map("slots")
+}
+
+model Character {
+  id                 Int      @id @default(autoincrement())
+  description        String?
+  relation           String?
+  age                Int?
+  bodyType           String?  @map("body_type")
+  stat               String?
+  defaultHp          Int      @map("default_hp")
+  defaultSp          Int      @map("default_sp")
+  name               String?
+  image              String?
+  characterGroupId   Int?
+  playingCharacters PlayingCharacter[]
+
+  characterGroup    CharacterGroup? @relation(fields: [characterGroupId], references: [id])
+
+  @@map("characters")
+}
+
+model ItemCategory {
+  id    Int    @id @default(autoincrement())
+  name  String
+  items Item[]
+
+  @@map("item_categories")
+}
+
+model PlayingCharacter {
+  id                     Int @id @default(autoincrement())
+  playingCharacterSetId  Int
+  characterId            Int
+  currentHp              Int
+  currentSp              Int
+
+  playingCharacterSet PlayingCharacterSet @relation(fields: [playingCharacterSetId], references: [id])
+  character           Character           @relation(fields: [characterId], references: [id])
+
+  @@map("playing_characters")
+}
+
+model Act {
+  id          Int           @id @default(autoincrement())
+  text        String        @db.Text
+  gameSession GameSession[]
+
+  @@map("acts")
+}
+
+model Bag {
+  id          Int         @id @default(autoincrement())
+  name        String?
+  image       String?
+  description String?
+  capacity    Int?
+  inventories Inventory[]
+
+  @@map("bags")
+}
+
+model CharacterGroup {
+  id                  Int                  @id @default(autoincrement())
+  name                String?
+  description         String?
+  image               String?
+  playingCharacterSet PlayingCharacterSet[]
+  characters          Character[]
+
+  @@map("character_groups")
+}
+
+enum StoreSection {
+  GROCERY
+  FASHION
+  HOUSEHOLD
 }
