@@ -32,33 +32,34 @@ export class AuthController {
 
   @Get('kakao')
   async kakaoLogin(@Req() req: Request, @Res() res: Response) {
+    this.logger.debug(`[kakaoLogin] Method invoked. Current Session ID: ${req.session.id}`);
     const state = crypto.randomBytes(16).toString('hex');
     (req.session as any).oauthState = state; // Store state in session
+    this.logger.debug(`[kakaoLogin] Generated state: ${state}`);
 
-    const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
-    const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
+    req.session.save((err) => {
+      if (err) {
+        this.logger.error('[kakaoLogin] Error saving session:', err);
+        return res.status(500).send('Error saving session');
+      }
+      this.logger.debug(`[kakaoLogin] Session saved. Session ID after save: ${req.session.id}`);
 
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}&state=${state}`;
-    res.redirect(kakaoAuthUrl);
+      const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
+      const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
+
+      this.logger.debug(`[kakaoLogin] KAKAO_CLIENT_ID: ${kakaoClientId}`);
+      this.logger.debug(`[kakaoLogin] KAKAO_CALLBACK_URL: ${kakaoCallbackUrl}`);
+
+      const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}&state=${state}`;
+      res.redirect(kakaoAuthUrl);
+    });
   }
 
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
   async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
-    const { state } = req.query;
-    const storedState = (req.session as any).oauthState;
-
-    // State validation
-    if (!state || state !== storedState) {
-      this.logger.error('State mismatch or missing:', {
-        received: state,
-        stored: storedState,
-      });
-      throw new UnauthorizedException('Invalid state parameter');
-    }
-
-    // Invalidate state to prevent replay attacks
-    delete (req.session as any).oauthState;
+    this.logger.debug(`[kakaoLoginCallback] Method invoked. Current Session ID: ${req.session.id}`);
+    this.logger.debug(`[kakaoLoginCallback] Incoming Query: ${JSON.stringify(req.query)}`);
 
     const userProfile = (req as any).user; // req.user is set by Passport
 
