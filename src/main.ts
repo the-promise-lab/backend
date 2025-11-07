@@ -12,6 +12,11 @@ import * as session from 'express-session'; // Import express-session
 import * as MySQLStore from 'express-mysql-session';
 import { URL } from 'url';
 
+// BigInt serialization fix
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap'); // Create a logger instance
 
@@ -85,7 +90,7 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: 'http://localhost:3000', // 프론트엔드 서버의 출처
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000', // 프론트엔드 서버의 출처
     credentials: true, // 쿠키를 포함한 요청을 허용
   });
 

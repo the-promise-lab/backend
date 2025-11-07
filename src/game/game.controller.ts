@@ -3,6 +3,8 @@ import { GameService } from './game.service';
 import { AuthGuard } from '@nestjs/passport'; // 예시: JWT 인증 가드
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
 import { SubmitInventoryDto } from './dto/submit-inventory.dto';
+import { SubmitInventoryResponseDto } from './dto/submit-inventory-response.dto';
+import { SelectCharacterSetResponseDto } from './dto/select-character-set-response.dto';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -10,6 +12,10 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { CharacterGroupResponseDto } from './dto/character-group-response.dto';
+import { SetupInfoResponseDto } from './dto/setup-info-response.dto';
+import { GameSessionResponseDto } from './dto/game-session-response.dto';
+import { CreateGameSessionResponseDto } from './dto/create-game-session-response.dto';
 
 @ApiTags('game')
 @Controller('game')
@@ -23,46 +29,10 @@ export class GameController {
   @ApiResponse({
     status: 200,
     description: '게임 세션 조회 성공',
-    schema: {
-      example: {
-        id: 1,
-        userId: 1,
-        currentActId: null,
-        createdAt: '2025-11-04T15:00:00.000Z',
-        playingCharacterSet: {
-          id: 1,
-          gameSessionId: 1,
-          characterGroupId: 1,
-          playingCharacter: [
-            {
-              id: 1,
-              playingCharacterSetId: 1,
-              characterId: 1,
-              currentHp: 100,
-              currentSp: 50,
-            },
-          ],
-        },
-        inventories: [
-          {
-            id: 1,
-            gameSessionId: 1,
-            bagId: 1,
-            slots: [
-              {
-                id: 1,
-                invId: 1,
-                itemId: 1,
-                quantity: 1,
-              },
-            ],
-          },
-        ],
-      },
-    },
+    type: GameSessionResponseDto,
   })
   @ApiResponse({ status: 404, description: '게임 세션을 찾을 수 없습니다.' })
-  findGameSession(@Req() req) {
+  findGameSession(@Req() req): Promise<GameSessionResponseDto> {
     return this.gameService.findGameSession(req.user.id);
   }
 
@@ -73,20 +43,13 @@ export class GameController {
   @ApiResponse({
     status: 201,
     description: '게임 세션 생성 성공',
-    schema: {
-      example: {
-        id: 1,
-        userId: 1,
-        currentActId: null,
-        createdAt: '2025-11-04T15:00:00.000Z',
-      },
-    },
+    type: CreateGameSessionResponseDto,
   })
   @ApiResponse({
     status: 409,
     description: '이미 진행 중인 게임 세션이 존재합니다.',
   })
-  createGameSession(@Req() req) {
+  createGameSession(@Req() req): Promise<CreateGameSessionResponseDto> {
     return this.gameService.createGameSession(req.user.id);
   }
 
@@ -95,20 +58,9 @@ export class GameController {
   @ApiResponse({
     status: 200,
     description: '캐릭터 그룹 목록 조회 성공',
-    schema: {
-      example: [
-        {
-          id: 1,
-          name: 'TFT',
-        },
-        {
-          id: 2,
-          name: '롤',
-        },
-      ],
-    },
+    type: [CharacterGroupResponseDto],
   })
-  getCharacterGroups() {
+  getCharacterGroups(): Promise<CharacterGroupResponseDto[]> {
     return this.gameService.getCharacterGroups();
   }
 
@@ -116,10 +68,19 @@ export class GameController {
   @ApiBearerAuth('JWT-auth')
   @Post('session/character-set')
   @ApiOperation({ summary: '캐릭터 셋 선택' })
-  @ApiBody({ type: SelectCharacterSetDto })
+  @ApiBody({
+    type: SelectCharacterSetDto,
+    examples: {
+      example1: {
+        summary: '헬스 광인들 선택',
+        value: { characterGroupId: 1 },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: '캐릭터 셋 선택 성공',
+    type: SelectCharacterSetResponseDto,
     schema: {
       example: {
         id: 1,
@@ -130,8 +91,15 @@ export class GameController {
             id: 1,
             playingCharacterSetId: 1,
             characterId: 1,
-            currentHp: 100,
-            currentSp: 50,
+            currentHp: 10,
+            currentSp: 10,
+          },
+          {
+            id: 2,
+            playingCharacterSetId: 1,
+            characterId: 2,
+            currentHp: 6,
+            currentSp: 20,
           },
         ],
       },
@@ -141,7 +109,7 @@ export class GameController {
   selectCharacterSet(
     @Req() req,
     @Body() selectCharacterSetDto: SelectCharacterSetDto,
-  ) {
+  ): Promise<SelectCharacterSetResponseDto> {
     return this.gameService.selectCharacterSet(
       req.user.id,
       selectCharacterSetDto,
@@ -153,24 +121,9 @@ export class GameController {
   @ApiResponse({
     status: 200,
     description: '게임 설정 정보 조회 성공',
-    schema: {
-      example: {
-        bags: [
-          {
-            id: 1,
-            name: '기본 가방',
-          },
-        ],
-        items: [
-          {
-            id: 1,
-            name: 'HP 물약',
-          },
-        ],
-      },
-    },
+    type: SetupInfoResponseDto,
   })
-  getSetupInfo() {
+  getSetupInfo(): Promise<SetupInfoResponseDto> {
     return this.gameService.getSetupInfo();
   }
 
@@ -178,28 +131,46 @@ export class GameController {
   @ApiBearerAuth('JWT-auth')
   @Post('session/inventory')
   @ApiOperation({ summary: '인벤토리 제출' })
-  @ApiBody({ type: SubmitInventoryDto })
+  @ApiBody({
+    type: SubmitInventoryDto,
+    examples: {
+      example1: {
+        summary: '기본 인벤토리 제출',
+        value: {
+          bagId: 1,
+          slots: [
+            { itemId: 1, quantity: 3 },
+            { itemId: 10, quantity: 5 },
+          ],
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: '인벤토리 제출 성공',
+    type: SubmitInventoryResponseDto,
     schema: {
       example: {
-        id: 1,
-        gameSessionId: 1,
-        bagId: 1,
-        slots: [
+        inventories: [
           {
             id: 1,
-            invId: 1,
-            itemId: 1,
-            quantity: 1,
+            gameSessionId: 1,
+            bagId: 1,
+            slots: [
+              { id: 1, invId: 1, itemId: 1, quantity: 3 },
+              { id: 2, invId: 1, itemId: 10, quantity: 5 },
+            ],
           },
         ],
       },
     },
   })
   @ApiResponse({ status: 404, description: '게임 세션을 찾을 수 없습니다.' })
-  submitInventory(@Req() req, @Body() submitInventoryDto: SubmitInventoryDto) {
+  submitInventory(
+    @Req() req,
+    @Body() submitInventoryDto: SubmitInventoryDto,
+  ): Promise<SubmitInventoryResponseDto> {
     return this.gameService.submitInventory(req.user.id, submitInventoryDto);
   }
 }

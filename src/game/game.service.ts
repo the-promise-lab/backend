@@ -32,7 +32,37 @@ export class GameService {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
     }
 
-    return session;
+    return {
+      id: Number(session.id),
+      userId: Number(session.userId),
+      currentActId: session.currentActId ? Number(session.currentActId) : null,
+      createdAt: session.createdAt,
+      playingCharacterSet: session.playingCharacterSet
+        ? {
+            id: Number(session.playingCharacterSet.id),
+            characterGroupId: Number(
+              session.playingCharacterSet.characterGroupId,
+            ),
+            playingCharacter: session.playingCharacterSet.playingCharacter.map(
+              (pc) => ({
+                id: Number(pc.id),
+                characterId: Number(pc.characterId),
+                currentHp: pc.currentHp,
+                currentSp: pc.currentSp,
+              }),
+            ),
+          }
+        : null,
+      inventories: session.inventories.map((inv) => ({
+        id: Number(inv.id),
+        bagId: Number(inv.bagId),
+        slots: inv.slots.map((slot) => ({
+          id: Number(slot.id),
+          itemId: Number(slot.itemId),
+          quantity: slot.quantity,
+        })),
+      })),
+    };
   }
 
   async createGameSession(userId: number) {
@@ -44,13 +74,23 @@ export class GameService {
       throw new ConflictException('이미 진행 중인 게임 세션이 존재합니다.');
     }
 
-    return this.prisma.gameSession.create({
+    const session = await this.prisma.gameSession.create({
       data: { userId },
     });
+    return {
+      ...session,
+      id: Number(session.id),
+      userId: Number(session.userId),
+      currentActId: session.currentActId ? Number(session.currentActId) : null,
+    };
   }
 
   async getCharacterGroups() {
-    return this.prisma.characterGroup.findMany();
+    const groups = await this.prisma.characterGroup.findMany();
+    return groups.map((g) => ({
+      ...g,
+      id: Number(g.id),
+    }));
   }
 
   async selectCharacterSet(userId: number, dto: SelectCharacterSetDto) {
@@ -90,10 +130,27 @@ export class GameService {
         })),
       });
 
-      return tx.playingCharacterSet.findUnique({
+      const result = await tx.playingCharacterSet.findUnique({
         where: { id: playingSet.id },
         include: { playingCharacter: true },
       });
+
+      if (!result) {
+        return null;
+      }
+
+      return {
+        ...result,
+        id: Number(result.id),
+        gameSessionId: Number(result.gameSessionId),
+        characterGroupId: Number(result.characterGroupId),
+        playingCharacter: result.playingCharacter.map((pc) => ({
+          ...pc,
+          id: Number(pc.id),
+          playingCharacterSetId: Number(pc.playingCharacterSetId),
+          characterId: Number(pc.characterId),
+        })),
+      };
     });
   }
 
@@ -102,7 +159,19 @@ export class GameService {
       this.prisma.bag.findMany(),
       this.prisma.item.findMany(),
     ]);
-    return { bags, items };
+
+    const mappedBags = bags.map((b) => ({
+      ...b,
+      id: Number(b.id),
+    }));
+
+    const mappedItems = items.map((i) => ({
+      ...i,
+      id: Number(i.id),
+      itemCategoryId: i.itemCategoryId ? Number(i.itemCategoryId) : null,
+    }));
+
+    return { bags: mappedBags, items: mappedItems };
   }
 
   async submitInventory(userId: number, dto: SubmitInventoryDto) {
@@ -115,7 +184,7 @@ export class GameService {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
     }
 
-    return this.prisma.inventory.create({
+    const inventory = await this.prisma.inventory.create({
       data: {
         gameSessionId: gameSession.id,
         bagId: dto.bagId,
@@ -127,5 +196,20 @@ export class GameService {
         slots: true,
       },
     });
+
+    const mappedInventory = {
+      ...inventory,
+      id: Number(inventory.id),
+      gameSessionId: Number(inventory.gameSessionId),
+      bagId: Number(inventory.bagId),
+      slots: inventory.slots.map((slot) => ({
+        ...slot,
+        id: Number(slot.id),
+        invId: Number(slot.invId),
+        itemId: Number(slot.itemId),
+      })),
+    };
+
+    return { inventories: [mappedInventory] };
   }
 }

@@ -60,7 +60,7 @@ model Item {
   isConsumable   Boolean? @map("IsConsumable")
   storeSection   StoreSection? @map("StoreSection")
   isVisable      Boolean? @map("IsVisable")
-  itemCategoryId BigInt?
+  itemCategoryId BigInt?  @map("ItemCategoryID")
   necessity      Int?     @map("필요도")
 
   itemCategory ItemCategory? @relation(fields: [itemCategoryId], references: [id])
@@ -94,8 +94,7 @@ model Slot {
 }
 
 model Character {
-  id                 BigInt      @id @default(autoincrement())
-  charId             String      @unique @map("CharID")
+  id                 BigInt      @id @default(autoincrement()) @map("CharID")
   name               String?     @map("CharName")
   age                Int?        @map("CharAge")
   description        String?     @map("CharDesc")
@@ -103,7 +102,7 @@ model Character {
   potraitImage       String?     @map("CharPotraitImage")
   defaultHp          Int?        @map("HealthDefault")
   defaultSp          Int?        @map("MentalDefault")
-  characterGroupId   BigInt?
+  characterGroupId   BigInt?     @map("CharacterGroupID")
   playingCharacters PlayingCharacter[]
 
   characterGroup    CharacterGroup? @relation(fields: [characterGroupId], references: [id])
@@ -141,8 +140,7 @@ model Act {
 }
 
 model Bag {
-  id          BigInt      @id @default(autoincrement())
-  bagId       String      @unique @map("BagID")
+  id          BigInt      @id @default(autoincrement()) @map("BagID")
   name        String?     @map("BagName")
   image       String?     @map("BagImageName")
   capacity    Int?        @map("Capacity")
@@ -152,12 +150,11 @@ model Bag {
 }
 
 model CharacterGroup {
-  id                  BigInt                  @id @default(autoincrement())
-  groupId             String                  @unique @map("GroupID")
+  id                  BigInt                  @id @default(autoincrement()) @map("GroupID")
   name                String?                 @map("GroupName")
   image               String?                 @map("GroupSelectImage")
   deathEndAct         Int?                    @map("DeathEndAct")
-  description         String?
+  description         String?                 @map("Description")
   playingCharacterSet PlayingCharacterSet[]
   characters          Character[]
 
