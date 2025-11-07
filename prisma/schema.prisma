@@ -8,7 +8,7 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        BigInt      @id @default(autoincrement())
   email     String?  @unique // 소셜로그인 시 이메일이 없을 수 있으므로 Nullable
   name      String?
 
@@ -27,9 +27,9 @@ model User {
 }
 
 model GameSession {
-  id           Int      @id @default(autoincrement())
-  userId       Int
-  currentActId Int?
+  id           BigInt      @id @default(autoincrement())
+  userId       BigInt
+  currentActId BigInt?
   createdAt    DateTime @default(now())
 
   user                User                 @relation(fields: [userId], references: [id])
@@ -41,9 +41,9 @@ model GameSession {
 }
 
 model Inventory {
-  id            Int @id @default(autoincrement())
-  gameSessionId Int
-  bagId         Int?
+  id            BigInt @id @default(autoincrement())
+  gameSessionId BigInt
+  bagId         BigInt?
 
   gameSession GameSession @relation(fields: [gameSessionId], references: [id])
   bag         Bag?        @relation(fields: [bagId], references: [id])
@@ -53,13 +53,14 @@ model Inventory {
 }
 
 model Item {
-  id             Int      @id @default(autoincrement())
-  name           String
-  description    String?
-  storeSection   StoreSection?
-  isConsumable   Boolean? @map("is_consumavle")
-  capacityCost   Int?
-  itemCategoryId Int?
+  id             BigInt      @id @default(autoincrement()) @map("ItemID")
+  name           String   @map("ItemName")
+  image          String?  @map("ItemImage")
+  capacityCost   Int?     @map("CapacityCost")
+  isConsumable   Boolean? @map("IsConsumable")
+  storeSection   StoreSection? @map("StoreSection")
+  isVisable      Boolean? @map("IsVisable")
+  itemCategoryId BigInt?
   necessity      Int?     @map("필요도")
 
   itemCategory ItemCategory? @relation(fields: [itemCategoryId], references: [id])
@@ -69,9 +70,9 @@ model Item {
 }
 
 model PlayingCharacterSet {
-  id               Int    @id @default(autoincrement())
-  gameSessionId    Int    @unique
-  characterGroupId Int?
+  id               BigInt    @id @default(autoincrement())
+  gameSessionId    BigInt    @unique
+  characterGroupId BigInt?
 
   gameSession      GameSession       @relation(fields: [gameSessionId], references: [id])
   characterGroup   CharacterGroup?   @relation(fields: [characterGroupId], references: [id])
@@ -81,9 +82,9 @@ model PlayingCharacterSet {
 }
 
 model Slot {
-  id       Int @id @default(autoincrement())
-  invId    Int
-  itemId   Int
+  id       BigInt @id @default(autoincrement())
+  invId    BigInt
+  itemId   BigInt
   quantity Int
 
   inventory Inventory @relation(fields: [invId], references: [id])
@@ -93,17 +94,16 @@ model Slot {
 }
 
 model Character {
-  id                 Int      @id @default(autoincrement())
-  description        String?
-  relation           String?
-  age                Int?
-  bodyType           String?  @map("body_type")
-  stat               String?
-  defaultHp          Int      @map("default_hp")
-  defaultSp          Int      @map("default_sp")
-  name               String?
-  image              String?
-  characterGroupId   Int?
+  id                 BigInt      @id @default(autoincrement())
+  charId             String      @unique @map("CharID")
+  name               String?     @map("CharName")
+  age                Int?        @map("CharAge")
+  description        String?     @map("CharDesc")
+  selectImage        String?     @map("CharSelectImage")
+  potraitImage       String?     @map("CharPotraitImage")
+  defaultHp          Int?        @map("HealthDefault")
+  defaultSp          Int?        @map("MentalDefault")
+  characterGroupId   BigInt?
   playingCharacters PlayingCharacter[]
 
   characterGroup    CharacterGroup? @relation(fields: [characterGroupId], references: [id])
@@ -112,17 +112,17 @@ model Character {
 }
 
 model ItemCategory {
-  id    Int    @id @default(autoincrement())
-  name  String
+  id    BigInt    @id @default(autoincrement()) @map("ItemCategoryID")
+  name  String?
   items Item[]
 
   @@map("item_categories")
 }
 
 model PlayingCharacter {
-  id                     Int @id @default(autoincrement())
-  playingCharacterSetId  Int
-  characterId            Int
+  id                     BigInt @id @default(autoincrement())
+  playingCharacterSetId  BigInt
+  characterId            BigInt
   currentHp              Int
   currentSp              Int
 
@@ -133,7 +133,7 @@ model PlayingCharacter {
 }
 
 model Act {
-  id          Int           @id @default(autoincrement())
+  id          BigInt           @id @default(autoincrement())
   text        String        @db.Text
   gameSession GameSession[]
 
@@ -141,21 +141,23 @@ model Act {
 }
 
 model Bag {
-  id          Int         @id @default(autoincrement())
-  name        String?
-  image       String?
-  description String?
-  capacity    Int?
+  id          BigInt      @id @default(autoincrement())
+  bagId       String      @unique @map("BagID")
+  name        String?     @map("BagName")
+  image       String?     @map("BagImageName")
+  capacity    Int?        @map("Capacity")
   inventories Inventory[]
 
   @@map("bags")
 }
 
 model CharacterGroup {
-  id                  Int                  @id @default(autoincrement())
-  name                String?
+  id                  BigInt                  @id @default(autoincrement())
+  groupId             String                  @unique @map("GroupID")
+  name                String?                 @map("GroupName")
+  image               String?                 @map("GroupSelectImage")
+  deathEndAct         Int?                    @map("DeathEndAct")
   description         String?
-  image               String?
   playingCharacterSet PlayingCharacterSet[]
   characters          Character[]
 
@@ -163,7 +165,12 @@ model CharacterGroup {
 }
 
 enum StoreSection {
-  GROCERY
-  FASHION
-  HOUSEHOLD
+  GroupGrocery
+  GroupElectronics
+  GroupDrugstore
+  GroupSale
+  GroupHousehold
+  GroupToy
+  GroupApparel
+  NoStore
 }

@@ -91,21 +91,27 @@ export class AuthService {
   }
 
   login(user: any) {
-    const payload = { sub: user.id, email: user.email };
+    const payload = { sub: user.id.toString(), email: user.email };
     return {
       accessToken: this.jwtService.sign(payload),
     };
   }
 
   async getUserFromJwt(payload: any) {
+    this.logger.debug(`[getUserFromJwt] Getting user for payload: ${JSON.stringify(payload)}`);
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: BigInt(payload.sub) },
     });
     // 필요한 정보만 반환 (비밀번호 등 민감 정보 제외)
     if (user) {
-      const { ...result } = user;
-      return result;
+      const userForSerialization = {
+        ...user,
+        id: user.id.toString(),
+      };
+      this.logger.debug(`[getUserFromJwt] User found: ${JSON.stringify(userForSerialization)}`);
+      return userForSerialization;
     }
+    this.logger.warn(`[getUserFromJwt] User not found for payload: ${JSON.stringify(payload)}`);
     return null;
   }
 }

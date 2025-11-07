@@ -26,6 +26,7 @@ export class AuthController {
   @Get('profile')
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Req() req: Request) {
+    this.logger.debug(`[getProfile] User from request: ${JSON.stringify(req.user)}`);
     // req.user는 JwtStrategy의 validate 함수에서 반환된 값입니다.
     return req.user;
   }
@@ -53,7 +54,12 @@ export class AuthController {
         await this.authService.findOrCreateUserFromSocialProfile(userProfile);
       const { accessToken } = this.authService.login(user);
 
-      res.cookie('accessToken', accessToken, { httpOnly: true });
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+      });
 
       // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
       res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
@@ -68,7 +74,12 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthGuard('jwt'))
   async logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('accessToken');
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+    });
     return { message: 'Successfully logged out' };
   }
 }
