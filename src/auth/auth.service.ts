@@ -22,41 +22,41 @@ export class AuthService {
   async findOrCreateUserFromSocialProfile(
     profile: SocialProfile,
   ): Promise<any> {
+    // 1. Always check the DB first.
+    let user = await this.prisma.user.findUnique({
+      where: {
+        snsId_provider: {
+          snsId: profile.snsId,
+          provider: profile.provider,
+        },
+      },
+    });
+
+    if (user) {
+      return user;
+    }
+
+    // 2. If user doesn't exist, use cache as a lock to prevent race conditions.
     const cacheKey = `${profile.provider}-${profile.snsId}`;
     const cachedStatus = this.userCreationCache.get(cacheKey);
 
-    if (cachedStatus) {
-      if (cachedStatus.status === 'COMPLETED') {
-        this.logger.log(`User for ${cacheKey} already processed successfully.`);
-        // Retrieve user from DB if needed, or assume it's already in DB
-        return this.prisma.user.findUnique({
-          where: {
-            snsId_provider: {
-              snsId: profile.snsId,
-              provider: profile.provider,
-            },
-          },
-        });
-      }
-      if (
-        cachedStatus.status === 'PROCESSING' &&
-        Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS
-      ) {
-        this.logger.log(`User for ${cacheKey} is currently being processed.`);
-        throw new ConflictException(
-          'User creation/lookup already in progress.',
-        );
-      }
+    if (
+      cachedStatus?.status === 'PROCESSING' &&
+      Date.now() - cachedStatus.timestamp < this.CACHE_EXPIRATION_MS
+    ) {
+      this.logger.log(`User for ${cacheKey} is currently being processed.`);
+      throw new ConflictException('User creation is already in progress.');
     }
 
-    // Mark as processing
+    // 3. Lock and create the user.
     this.userCreationCache.set(cacheKey, {
       status: 'PROCESSING',
       timestamp: Date.now(),
     });
 
     try {
-      let user = await this.prisma.user.findUnique({
+      // Re-check in case another process created it between our first check and acquiring the lock.
+      user = await this.prisma.user.findUnique({
         where: {
           snsId_provider: {
             snsId: profile.snsId,
@@ -66,6 +66,7 @@ export class AuthService {
       });
 
       if (!user) {
+        this.logger.log(`User for ${cacheKey} not found. Creating new user.`);
         user = await this.prisma.user.create({
           data: {
             snsId: profile.snsId,
@@ -76,11 +77,16 @@ export class AuthService {
         });
       }
 
-      // Mark as completed
+      // Mark as completed and remove from cache after a short delay
       this.userCreationCache.set(cacheKey, {
         status: 'COMPLETED',
         timestamp: Date.now(),
       });
+      setTimeout(
+        () => this.userCreationCache.delete(cacheKey),
+        this.CACHE_EXPIRATION_MS,
+      );
+
       return user;
     } catch (error) {
       this.logger.error(`Error processing user for ${cacheKey}:`, error);
