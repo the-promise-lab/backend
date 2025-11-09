@@ -66,23 +66,52 @@ export class GameService {
   }
 
   async createGameSession(userId: number) {
-    const existingSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const existingSession = await tx.gameSession.findFirst({
+        where: { userId },
+        include: {
+          inventories: true,
+          playingCharacterSet: true,
+        },
+      });
 
-    if (existingSession) {
-      throw new ConflictException('이미 진행 중인 게임 세션이 존재합니다.');
-    }
+      if (existingSession) {
+        if (existingSession.inventories.length > 0) {
+          const inventoryIds = existingSession.inventories.map((inv) => inv.id);
+          await tx.slot.deleteMany({
+            where: { invId: { in: inventoryIds } },
+          });
+          await tx.inventory.deleteMany({
+            where: { gameSessionId: existingSession.id },
+          });
+        }
 
-    const session = await this.prisma.gameSession.create({
-      data: { userId },
+        if (existingSession.playingCharacterSet) {
+          await tx.playingCharacter.deleteMany({
+            where: {
+              playingCharacterSetId: existingSession.playingCharacterSet.id,
+            },
+          });
+          await tx.playingCharacterSet.delete({
+            where: { id: existingSession.playingCharacterSet.id },
+          });
+        }
+
+        await tx.gameSession.delete({ where: { id: existingSession.id } });
+      }
+
+      const session = await tx.gameSession.create({
+        data: { userId },
+      });
+      return {
+        ...session,
+        id: Number(session.id),
+        userId: Number(session.userId),
+        currentActId: session.currentActId
+          ? Number(session.currentActId)
+          : null,
+      };
     });
-    return {
-      ...session,
-      id: Number(session.id),
-      userId: Number(session.userId),
-      currentActId: session.currentActId ? Number(session.currentActId) : null,
-    };
   }
 
   async getCharacterGroups() {

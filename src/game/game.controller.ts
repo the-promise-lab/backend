@@ -45,10 +45,6 @@ export class GameController {
     description: '게임 세션 생성 성공',
     type: CreateGameSessionResponseDto,
   })
-  @ApiResponse({
-    status: 409,
-    description: '이미 진행 중인 게임 세션이 존재합니다.',
-  })
   createGameSession(@Req() req): Promise<CreateGameSessionResponseDto> {
     return this.gameService.createGameSession(req.user.id);
   }
