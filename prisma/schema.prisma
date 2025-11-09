@@ -132,12 +132,30 @@ model PlayingCharacter {
 }
 
 model Act {
-  id          BigInt           @id @default(autoincrement())
-  text        String        @db.Text
-  gameSession GameSession[]
+  id                      BigInt           @id @default(autoincrement())
+  text                    String           @db.Text
+  events                  Event[]
+  game_sessions           GameSession[]
+  prologForCharacterGroup CharacterGroup[]
 
   @@map("acts")
 }
+
+model Event {
+  id        BigInt    @id @default(autoincrement())
+  actId     BigInt
+  eventType EventType @map("EventType")
+  order     Int
+  speaker   String
+  script    String    @db.Text
+  position  String
+  emotion   String
+  bgImage   String
+  act         Act       @relation(fields: [actId], references: [id])
+
+  @@map("events")
+}
+
 
 model Bag {
   id          BigInt      @id @default(autoincrement()) @map("BagID")
@@ -155,6 +173,8 @@ model CharacterGroup {
   image               String?                 @map("GroupSelectImage")
   deathEndAct         Int?                    @map("DeathEndAct")
   description         String?                 @map("Description")
+  prologActId         BigInt?
+  prologAct           Act?                    @relation(fields: [prologActId], references: [id])
   playingCharacterSet PlayingCharacterSet[]
   characters          Character[]
 
@@ -170,4 +190,12 @@ enum StoreSection {
   GroupToy
   GroupApparel
   NoStore
+}
+
+enum EventType {
+  Simple
+  System
+  StoryChoice
+  ItemChoice
+  Status
 }

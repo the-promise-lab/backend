@@ -212,6 +212,51 @@ export class GameService {
     return { bags: mappedBags, items: mappedItems };
   }
 
+  async getPrologEvents(userId: number) {
+    const gameSession = await this.prisma.gameSession.findFirst({
+      where: { userId },
+      include: {
+        playingCharacterSet: {
+          include: {
+            characterGroup: {
+              include: {
+                prologAct: {
+                  include: {
+                    events: {
+                      orderBy: {
+                        order: 'asc',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!gameSession) {
+      throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
+    }
+
+    if (!gameSession.playingCharacterSet) {
+      throw new NotFoundException('캐릭터 그룹이 선택되지 않았습니다.');
+    }
+
+    const prologAct = gameSession.playingCharacterSet.characterGroup?.prologAct;
+
+    if (!prologAct) {
+      return [];
+    }
+
+    return prologAct.events.map((event) => ({
+      ...event,
+      id: BigInt(event.id),
+      actId: BigInt(event.actId),
+    }));
+  }
+
   async submitInventory(userId: number, dto: SubmitInventoryDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
       where: { userId },

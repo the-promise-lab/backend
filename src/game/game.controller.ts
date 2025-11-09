@@ -16,6 +16,7 @@ import { CharacterGroupResponseDto } from './dto/character-group-response.dto';
 import { SetupInfoResponseDto } from './dto/setup-info-response.dto';
 import { GameSessionResponseDto } from './dto/game-session-response.dto';
 import { CreateGameSessionResponseDto } from './dto/create-game-session-response.dto';
+import { EventResponseDto } from './dto/event-response.dto';
 
 @ApiTags('game')
 @Controller('game')
@@ -47,6 +48,20 @@ export class GameController {
   })
   createGameSession(@Req() req): Promise<CreateGameSessionResponseDto> {
     return this.gameService.createGameSession(req.user.id);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('session/prolog')
+  @ApiOperation({ summary: '선택한 캐릭터 그룹의 프롤로그 이벤트 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '프롤로그 이벤트 목록 조회 성공',
+    type: [EventResponseDto],
+  })
+  @ApiResponse({ status: 404, description: '리소스를 찾을 수 없습니다.' })
+  getPrologEvents(@Req() req): Promise<EventResponseDto[]> {
+    return this.gameService.getPrologEvents(req.user.id);
   }
 
   @Get('character-groups')
