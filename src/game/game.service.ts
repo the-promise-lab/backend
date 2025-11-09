@@ -114,11 +114,20 @@ export class GameService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const playingSet = await tx.playingCharacterSet.create({
-        data: {
+      const playingSet = await tx.playingCharacterSet.upsert({
+        where: { gameSessionId: gameSession.id },
+        update: {
+          characterGroupId: dto.characterGroupId,
+        },
+        create: {
           gameSessionId: gameSession.id,
           characterGroupId: dto.characterGroupId,
         },
+      });
+
+      // Delete old characters and create new ones
+      await tx.playingCharacter.deleteMany({
+        where: { playingCharacterSetId: playingSet.id },
       });
 
       await tx.playingCharacter.createMany({
