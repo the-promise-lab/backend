@@ -170,7 +170,7 @@ export class GameService {
 
       const result = await tx.playingCharacterSet.findUnique({
         where: { id: playingSet.id },
-        include: { playingCharacter: true },
+        include: { playingCharacter: { include: { character: true } } },
       });
 
       if (!result) {
@@ -187,6 +187,13 @@ export class GameService {
           id: Number(pc.id),
           playingCharacterSetId: Number(pc.playingCharacterSetId),
           characterId: Number(pc.characterId),
+          character: {
+            ...pc.character,
+            id: BigInt(pc.character.id),
+            characterGroupId: pc.character.characterGroupId
+              ? BigInt(pc.character.characterGroupId)
+              : null,
+          },
         })),
       };
     });

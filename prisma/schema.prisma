@@ -61,7 +61,7 @@ model Item {
   storeSection   StoreSection? @map("StoreSection")
   isVisable      Boolean? @map("IsVisable")
   itemCategoryId BigInt?  @map("ItemCategoryID")
-  necessity      Int?     @map("필요도")
+  necessity      Int?     @map("necessity")
 
   itemCategory ItemCategory? @relation(fields: [itemCategoryId], references: [id])
   slots        Slot[]
@@ -103,6 +103,8 @@ model Character {
   defaultHp          Int?        @map("HealthDefault")
   defaultSp          Int?        @map("MentalDefault")
   characterGroupId   BigInt?     @map("CharacterGroupID")
+  bgColor            String?     @map("CharBGColor")
+  borderColor        String?     @map("CharBorderColor")
   playingCharacters PlayingCharacter[]
 
   characterGroup    CharacterGroup? @relation(fields: [characterGroupId], references: [id])

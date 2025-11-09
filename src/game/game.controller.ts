@@ -92,29 +92,6 @@ export class GameController {
     status: 201,
     description: '캐릭터 셋 선택 성공',
     type: SelectCharacterSetResponseDto,
-    schema: {
-      example: {
-        id: 1,
-        gameSessionId: 1,
-        characterGroupId: 1,
-        playingCharacter: [
-          {
-            id: 1,
-            playingCharacterSetId: 1,
-            characterId: 1,
-            currentHp: 10,
-            currentSp: 10,
-          },
-          {
-            id: 2,
-            playingCharacterSetId: 1,
-            characterId: 2,
-            currentHp: 6,
-            currentSp: 20,
-          },
-        ],
-      },
-    },
   })
   @ApiResponse({ status: 404, description: '리소스를 찾을 수 없습니다.' })
   selectCharacterSet(
