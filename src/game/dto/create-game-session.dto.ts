@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CreateGameSessionResponseDto {
+export class CreateGameSessionDto {
   @ApiProperty({ example: 1 })
   id: number;
 

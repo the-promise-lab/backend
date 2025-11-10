@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,7 +16,11 @@ export class GameService {
       include: {
         playingCharacterSet: {
           include: {
-            playingCharacter: true,
+            playingCharacter: {
+              include: {
+                character: true,
+              },
+            },
           },
         },
         inventories: {
@@ -46,7 +49,14 @@ export class GameService {
             playingCharacter: session.playingCharacterSet.playingCharacter.map(
               (pc) => ({
                 id: Number(pc.id),
-                characterId: Number(pc.characterId),
+                playingCharacterSetId: Number(pc.playingCharacterSetId),
+                character: {
+                  ...pc.character,
+                  id: BigInt(pc.character.id),
+                  characterGroupId: pc.character.characterGroupId
+                    ? BigInt(pc.character.characterGroupId)
+                    : null,
+                },
                 currentHp: pc.currentHp,
                 currentSp: pc.currentSp,
               }),
@@ -58,6 +68,7 @@ export class GameService {
         bagId: Number(inv.bagId),
         slots: inv.slots.map((slot) => ({
           id: Number(slot.id),
+          invId: Number(slot.invId),
           itemId: Number(slot.itemId),
           quantity: slot.quantity,
         })),

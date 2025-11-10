@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EventType } from '@prisma/client';
 
-export class EventResponseDto {
+export class EventDto {
   @ApiProperty()
   id: bigint;
 

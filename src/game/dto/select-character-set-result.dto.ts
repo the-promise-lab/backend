@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsInt } from 'class-validator';
 import { PlayingCharacterDto } from './playing-character.dto';
 
-export class SelectCharacterSetResponseDto {
+export class SelectCharacterSetResultDto {
   @ApiProperty({ example: 1, description: '플레이 중인 캐릭터 셋 ID' })
   @IsInt()
   id: number;

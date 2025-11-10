@@ -55,7 +55,7 @@ async function bootstrap() {
   };
 
   // Log the DB options (excluding password for security)
-  const { password, ...dbOptionsForLogging } = dbOptions;
+  const { ...dbOptionsForLogging } = dbOptions;
   logger.log(`Initializing MySQL session store with options: ${JSON.stringify(dbOptionsForLogging)}`);
 
   const sessionStore = new (MySQLStore(session as any))(dbOptions);

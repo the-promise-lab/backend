@@ -5,14 +5,12 @@ import {
   Req,
   Res,
   UseGuards,
-  UnauthorizedException,
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
-import * as crypto from 'crypto';
 
 @Controller('auth')
 export class AuthController {

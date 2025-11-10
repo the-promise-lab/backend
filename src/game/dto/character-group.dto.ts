@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CharacterGroupResponseDto {
+export class CharacterGroupDto {
   @ApiProperty({ example: 1 })
   id: number;
 

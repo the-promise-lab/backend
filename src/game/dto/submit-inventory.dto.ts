@@ -1,16 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsInt, ValidateNested } from 'class-validator';
-
-class SlotDto {
-  @ApiProperty({ example: 1, description: '아이템 ID' })
-  @IsInt()
-  itemId: number;
-
-  @ApiProperty({ example: 1, description: '수량' })
-  @IsInt()
-  quantity: number;
-}
+import { SlotDto } from './create-slot.dto';
 
 export class SubmitInventoryDto {
   @ApiProperty({ example: 1, description: '가방 ID' })
