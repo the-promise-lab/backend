@@ -17,7 +17,7 @@ export class CharacterDto {
   selectImage?: string | null;
 
   @ApiProperty({ required: false, nullable: true })
-  potraitImage?: string | null;
+  portraitImage?: string | null;
 
   @ApiProperty({ required: false, nullable: true })
   defaultHp?: number | null;

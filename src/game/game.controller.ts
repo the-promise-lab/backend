@@ -50,20 +50,6 @@ export class GameController {
     return this.gameService.createGameSession(req.user.id);
   }
 
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth('JWT-auth')
-  @Get('session/prolog')
-  @ApiOperation({ summary: '선택한 캐릭터 그룹의 프롤로그 이벤트 목록 조회' })
-  @ApiResponse({
-    status: 200,
-    description: '프롤로그 이벤트 목록 조회 성공',
-    type: [EventDto],
-  })
-  @ApiResponse({ status: 404, description: '리소스를 찾을 수 없습니다.' })
-  getPrologEvents(@Req() req): Promise<EventDto[]> {
-    return this.gameService.getPrologEvents(req.user.id);
-  }
-
   @Get('character-groups')
   @ApiOperation({ summary: '캐릭터 그룹 목록 조회' })
   @ApiResponse({
