@@ -6,11 +6,21 @@ import {
   Res,
   UseGuards,
   Logger,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+
+declare module 'express' {
+  interface Request {
+    headers: {
+      origin?: string;
+      [key: string]: string | string[] | undefined;
+    };
+  }
+}
 
 @Controller('auth')
 export class AuthController {
@@ -30,13 +40,42 @@ export class AuthController {
   }
 
   @Get('kakao')
-  async kakaoLogin(@Req() req: Request, @Res() res: Response) {
-    this.logger.debug(`[kakaoLogin] Method invoked. Redirecting to Kakao without state.`);
+  async kakaoLogin(
+    @Res() res: Response,
+    @Query('redirect_uri') redirectUri?: string,
+  ) {
+    this.logger.debug(
+      `[kakaoLogin] Method invoked. redirectUri: ${redirectUri}`,
+    );
 
+    const allowedOrigins = (
+      this.configService.get('FRONTEND_URLS') || ''
+    ).split(',');
+    let finalRedirectUri = allowedOrigins.length > 0 ? allowedOrigins[0] : '/';
+
+    if (redirectUri) {
+      try {
+        const providedOrigin = new URL(redirectUri).origin;
+        if (allowedOrigins.includes(providedOrigin)) {
+          finalRedirectUri = redirectUri;
+        } else {
+          this.logger.warn(
+            `[kakaoLogin] Provided redirect_uri origin "${providedOrigin}" is not in the whitelist. Using default "${finalRedirectUri}".`,
+          );
+        }
+      } catch (error) {
+        this.logger.warn(
+          `[kakaoLogin] Invalid redirect_uri "${redirectUri}". Using default "${finalRedirectUri}".`,
+        );
+      }
+    }
+    finalRedirectUri = redirectUri;
+    const state = Buffer.from(finalRedirectUri).toString('base64');
     const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
     const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
 
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}`;
+    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=${kakaoClientId}&redirect_uri=${kakaoCallbackUrl}&state=${state}`;
+    this.logger.debug(`[kakaoLogin] Redirect URL: ${kakaoAuthUrl}`);
     res.redirect(kakaoAuthUrl);
   }
 
@@ -44,6 +83,23 @@ export class AuthController {
   @UseGuards(AuthGuard('kakao'))
   async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
     this.logger.debug(`[kakaoLoginCallback] Method invoked.`);
+
+    const state = (req.query.state as string) || '';
+    let redirectUrl = '';
+    try {
+      redirectUrl = Buffer.from(state, 'base64').toString('utf-8');
+      // Basic validation to ensure the URL is not malformed
+      new URL(redirectUrl);
+      this.logger.debug(`[kakaoLoginCallback] Valid redirect URL: ${redirectUrl}`);
+    } catch (error) {
+      this.logger.error(
+        `[kakaoLoginCallback] Invalid or missing state. Using default redirect.`,
+      );
+      const allowedOrigins = (
+        this.configService.get('FRONTEND_URLS') || ''
+      ).split(',');
+      redirectUrl = allowedOrigins.length > 0 ? allowedOrigins[0] : '/';
+    }
 
     const userProfile = (req as any).user; // req.user is set by Passport
 
@@ -59,13 +115,10 @@ export class AuthController {
         path: '/',
       });
 
-      // TODO: 프론트엔드 로그인 성공 페이지로 리디렉션
-      res.redirect(this.configService.get('FRONTEND_URL')); // 예시 URL
+      res.redirect(redirectUrl);
     } catch (e) {
       this.logger.error('Error during user processing or token generation:', e);
-      res.redirect(
-        `${this.configService.get('FRONTEND_URL')}/error?message=Login failed`,
-      );
+      res.redirect(`${redirectUrl}/error?message=Login failed`);
     }
   }
 
