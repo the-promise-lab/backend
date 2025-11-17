@@ -23,7 +23,7 @@ export class GameService {
             },
           },
         },
-        inventories: {
+        inventory: {
           include: {
             slots: true,
           },
@@ -63,16 +63,18 @@ export class GameService {
             ),
           }
         : null,
-      inventories: session.inventories.map((inv) => ({
-        id: Number(inv.id),
-        bagId: Number(inv.bagId),
-        slots: inv.slots.map((slot) => ({
-          id: Number(slot.id),
-          invId: Number(slot.invId),
-          itemId: Number(slot.itemId),
-          quantity: slot.quantity,
-        })),
-      })),
+      inventory: session.inventory
+        ? {
+            id: Number(session.inventory.id),
+            bagId: Number(session.inventory.bagId),
+            slots: session.inventory.slots.map((slot) => ({
+              id: Number(slot.id),
+              invId: Number(slot.invId),
+              itemId: Number(slot.itemId),
+              quantity: slot.quantity,
+            })),
+          }
+        : null,
     };
   }
 
@@ -81,19 +83,18 @@ export class GameService {
       const existingSession = await tx.gameSession.findFirst({
         where: { userId },
         include: {
-          inventories: true,
           playingCharacterSet: true,
+          inventory: true,
         },
       });
 
       if (existingSession) {
-        if (existingSession.inventories.length > 0) {
-          const inventoryIds = existingSession.inventories.map((inv) => inv.id);
+        if (existingSession.inventory) {
           await tx.slot.deleteMany({
-            where: { invId: { in: inventoryIds } },
+            where: { invId: existingSession.inventory.id },
           });
-          await tx.inventory.deleteMany({
-            where: { gameSessionId: existingSession.id },
+          await tx.inventory.delete({
+            where: { id: existingSession.inventory.id },
           });
         }
 
@@ -211,9 +212,13 @@ export class GameService {
   }
 
   async getSetupInfo() {
-    const [bags, items] = await Promise.all([
+    const [bags, storeSections] = await Promise.all([
       this.prisma.bag.findMany(),
-      this.prisma.item.findMany(),
+      this.prisma.storeSection.findMany({
+        include: {
+          items: true,
+        },
+      }),
     ]);
 
     const mappedBags = bags.map((b) => ({
@@ -221,13 +226,18 @@ export class GameService {
       id: Number(b.id),
     }));
 
-    const mappedItems = items.map((i) => ({
-      ...i,
-      id: Number(i.id),
-      itemCategoryId: i.itemCategoryId ? Number(i.itemCategoryId) : null,
+    const mappedStoreSections = storeSections.map((section) => ({
+      ...section,
+      id: Number(section.id),
+      items: section.items.map((item) => ({
+        ...item,
+        id: Number(item.id),
+        itemCategoryId: item.itemCategoryId ? Number(item.itemCategoryId) : null,
+        storeSectionId: item.storeSectionId ? Number(item.storeSectionId) : null,
+      })),
     }));
 
-    return { bags: mappedBags, items: mappedItems };
+    return { bags: mappedBags, storeSections: mappedStoreSections };
   }
 
 
@@ -242,32 +252,43 @@ export class GameService {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
     }
 
-    const inventory = await this.prisma.inventory.create({
-      data: {
-        gameSessionId: gameSession.id,
-        bagId: dto.bagId,
-        slots: {
-          create: dto.slots,
+    return this.prisma.$transaction(async (tx) => {
+      const existingInventory = await tx.inventory.findUnique({
+        where: { gameSessionId: gameSession.id },
+      });
+
+      if (existingInventory) {
+        await tx.slot.deleteMany({ where: { invId: existingInventory.id } });
+        await tx.inventory.delete({ where: { id: existingInventory.id } });
+      }
+
+      const inventory = await tx.inventory.create({
+        data: {
+          gameSessionId: gameSession.id,
+          bagId: dto.bagId,
+          slots: {
+            create: dto.slots,
+          },
         },
-      },
-      include: {
-        slots: true,
-      },
+        include: {
+          slots: true,
+        },
+      });
+
+      const mappedInventory = {
+        ...inventory,
+        id: Number(inventory.id),
+        gameSessionId: Number(inventory.gameSessionId),
+        bagId: Number(inventory.bagId),
+        slots: inventory.slots.map((slot) => ({
+          ...slot,
+          id: Number(slot.id),
+          invId: Number(slot.invId),
+          itemId: Number(slot.itemId),
+        })),
+      };
+
+      return mappedInventory;
     });
-
-    const mappedInventory = {
-      ...inventory,
-      id: Number(inventory.id),
-      gameSessionId: Number(inventory.gameSessionId),
-      bagId: Number(inventory.bagId),
-      slots: inventory.slots.map((slot) => ({
-        ...slot,
-        id: Number(slot.id),
-        invId: Number(slot.invId),
-        itemId: Number(slot.itemId),
-      })),
-    };
-
-    return { inventories: [mappedInventory] };
   }
 }

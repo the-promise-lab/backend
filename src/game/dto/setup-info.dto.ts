@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, ValidateNested } from 'class-validator';
 import { BagDto } from './bag.dto';
-import { ItemDto } from './item.dto';
+import { StoreSectionDto } from './store-section.dto';
 
 export class SetupInfoDto {
   @ApiProperty({ type: [BagDto] })
@@ -11,9 +11,9 @@ export class SetupInfoDto {
   @Type(() => BagDto)
   bags: BagDto[];
 
-  @ApiProperty({ type: [ItemDto] })
+  @ApiProperty({ type: [StoreSectionDto] })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => ItemDto)
-  items: ItemDto[];
+  @Type(() => StoreSectionDto)
+  storeSections: StoreSectionDto[];
 }

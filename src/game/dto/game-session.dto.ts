@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, ValidateNested } from 'class-validator';
-import { InventoryDto } from './inventory.dto';
+import { ValidateNested } from 'class-validator';
 import { PlayingCharacterSetDto } from './playing-character-set.dto';
+import { InventoryDto } from './inventory.dto';
 
 export class GameSessionDto {
   @ApiProperty()
@@ -17,9 +17,8 @@ export class GameSessionDto {
   @ValidateNested()
   @Type(() => PlayingCharacterSetDto)
   playingCharacterSet: PlayingCharacterSetDto | null;
-  @ApiProperty({ type: [InventoryDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
+  @ApiProperty({ type: InventoryDto, nullable: true })
+  @ValidateNested()
   @Type(() => InventoryDto)
-  inventories: InventoryDto[];
+  inventory: InventoryDto | null;
 }

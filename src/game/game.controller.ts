@@ -3,7 +3,6 @@ import { GameService } from './game.service';
 import { AuthGuard } from '@nestjs/passport'; // 예시: JWT 인증 가드
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
 import { SubmitInventoryDto } from './dto/submit-inventory.dto';
-import { SubmitInventoryResultDto } from './dto/submit-inventory-result.dto';
 import { SelectCharacterSetResultDto } from './dto/select-character-set-result.dto';
 import {
   ApiBearerAuth,
@@ -17,6 +16,7 @@ import { SetupInfoDto } from './dto/setup-info.dto';
 import { GameSessionDto } from './dto/game-session.dto';
 import { CreateGameSessionDto } from './dto/create-game-session.dto';
 import { EventDto } from './dto/event.dto';
+import { InventoryDto } from './dto/inventory.dto';
 
 @ApiTags('game')
 @Controller('game')
@@ -123,19 +123,15 @@ export class GameController {
   @ApiResponse({
     status: 201,
     description: '인벤토리 제출 성공',
-    type: SubmitInventoryResultDto,
+    type: InventoryDto,
     schema: {
       example: {
-        inventories: [
-          {
-            id: 1,
-            gameSessionId: 1,
-            bagId: 1,
-            slots: [
-              { id: 1, invId: 1, itemId: 1, quantity: 3 },
-              { id: 2, invId: 1, itemId: 10, quantity: 5 },
-            ],
-          },
+        id: 1,
+        gameSessionId: 1,
+        bagId: 1,
+        slots: [
+          { id: 1, invId: 1, itemId: 1, quantity: 3 },
+          { id: 2, invId: 1, itemId: 10, quantity: 5 },
         ],
       },
     },
@@ -144,7 +140,7 @@ export class GameController {
   submitInventory(
     @Req() req,
     @Body() submitInventoryDto: SubmitInventoryDto,
-  ): Promise<SubmitInventoryResultDto> {
+  ): Promise<InventoryDto> {
     return this.gameService.submitInventory(req.user.id, submitInventoryDto);
   }
 }

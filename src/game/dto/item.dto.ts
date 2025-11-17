@@ -12,7 +12,7 @@ export class ItemDto {
   @ApiProperty()
   isConsumable: boolean;
   @ApiProperty()
-  storeSection: string;
+  storeSectionId: number;
   @ApiProperty()
   isVisable: boolean;
   @ApiProperty()

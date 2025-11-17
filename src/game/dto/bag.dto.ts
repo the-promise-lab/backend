@@ -9,4 +9,6 @@ export class BagDto {
   image: string;
   @ApiProperty()
   capacity: number;
+  @ApiProperty()
+  description: string;
 }

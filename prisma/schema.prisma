@@ -35,15 +35,15 @@ model GameSession {
 
   user                User                 @relation(fields: [userId], references: [id])
   currentAct          Act?                 @relation(fields: [currentActId], references: [id])
-  inventories         Inventory[]
   playingCharacterSet PlayingCharacterSet?
+  inventory           Inventory?
 
   @@map("game_sessions")
 }
 
 model Inventory {
-  id            BigInt  @id @default(autoincrement())
-  gameSessionId BigInt
+  id            BigInt    @id @default(autoincrement())
+  gameSessionId BigInt    @unique
   bagId         BigInt?
 
   gameSession GameSession @relation(fields: [gameSessionId], references: [id])
@@ -59,7 +59,8 @@ model Item {
   image          String?       @map("ItemImage")
   capacityCost   Int?          @map("CapacityCost")
   isConsumable   Boolean?      @map("IsConsumable")
-  storeSection   StoreSection? @map("StoreSection")
+  storeSectionId BigInt?
+  storeSection   StoreSection? @relation(fields: [storeSectionId], references: [id])
   isVisable      Boolean?      @map("IsVisable")
   itemCategoryId BigInt?       @map("ItemCategoryID")
   necessity      Int?          @map("necessity")
@@ -186,6 +187,7 @@ model Bag {
   name        String?     @map("BagName")
   image       String?     @map("BagImageName")
   capacity    Int?        @map("Capacity")
+  description String?
   inventories Inventory[]
 
   @@map("bags")
@@ -239,15 +241,13 @@ model IntroEvent {
   @@map("intro_events")
 }
 
-enum StoreSection {
-  GroupGrocery
-  GroupElectronics
-  GroupDrugstore
-  GroupSale
-  GroupHousehold
-  GroupToy
-  GroupApparel
-  NoStore
+model StoreSection {
+  id              BigInt  @id @default(autoincrement())
+  name            String  @unique
+  backgroundImage String?
+  items           Item[]
+
+  @@map("store_sections")
 }
 
 enum EventType {
