@@ -69,7 +69,6 @@ export class AuthController {
         );
       }
     }
-    finalRedirectUri = redirectUri;
     const state = Buffer.from(finalRedirectUri).toString('base64');
     const kakaoClientId = this.configService.get('KAKAO_CLIENT_ID');
     const kakaoCallbackUrl = this.configService.get('KAKAO_CALLBACK_URL');
