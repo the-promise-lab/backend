@@ -55,8 +55,13 @@ async function bootstrap() {
   };
 
   // Log the DB options (excluding password for security)
-  const { ...dbOptionsForLogging } = dbOptions;
-  logger.log(`Initializing MySQL session store with options: ${JSON.stringify(dbOptionsForLogging)}`);
+  const dbOptionsForLogging = { ...dbOptions };
+  delete (dbOptionsForLogging as any).password;
+  logger.log(
+    `Initializing MySQL session store with options: ${JSON.stringify(
+      dbOptionsForLogging,
+    )}`,
+  );
 
   const sessionStore = new (MySQLStore(session as any))(dbOptions);
 
@@ -90,9 +95,16 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000', // 프론트엔드 서버의 출처
-    credentials: true, // 쿠키를 포함한 요청을 허용
+    origin: [
+      'http://localhost:3000',
+      'http://43.200.235.94.nip.io',
+      'https://43.200.235.94.nip.io',
+      'https://bag-to-the-dev.vercel.app/',
+      'https://bag-to-the-future.vercel.app/',
+    ],
+    credentials: true,
   });
+
 
   // Global prefix
   app.setGlobalPrefix('api');
