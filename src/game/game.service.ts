@@ -25,7 +25,11 @@ export class GameService {
         },
         inventory: {
           include: {
-            slots: true,
+            slots: {
+              include: {
+                item: true,
+              },
+            },
           },
         },
       },
@@ -70,7 +74,16 @@ export class GameService {
             slots: session.inventory.slots.map((slot) => ({
               id: Number(slot.id),
               invId: Number(slot.invId),
-              itemId: Number(slot.itemId),
+              item: {
+                ...slot.item,
+                id: Number(slot.item.id),
+                itemCategoryId: slot.item.itemCategoryId
+                  ? Number(slot.item.itemCategoryId)
+                  : null,
+                storeSectionId: slot.item.storeSectionId
+                  ? Number(slot.item.storeSectionId)
+                  : null,
+              },
               quantity: slot.quantity,
             })),
           }
@@ -271,7 +284,11 @@ export class GameService {
           },
         },
         include: {
-          slots: true,
+          slots: {
+            include: {
+              item: true,
+            },
+          },
         },
       });
 
@@ -284,7 +301,16 @@ export class GameService {
           ...slot,
           id: Number(slot.id),
           invId: Number(slot.invId),
-          itemId: Number(slot.itemId),
+          item: {
+            ...slot.item,
+            id: Number(slot.item.id),
+            itemCategoryId: slot.item.itemCategoryId
+              ? Number(slot.item.itemCategoryId)
+              : null,
+            storeSectionId: slot.item.storeSectionId
+              ? Number(slot.item.storeSectionId)
+              : null,
+          },
         })),
       };
 
