@@ -63,7 +63,7 @@ export class AuthController {
             `[kakaoLogin] Provided redirect_uri origin "${providedOrigin}" is not in the whitelist. Using default "${finalRedirectUri}".`,
           );
         }
-      } catch (error) {
+      } catch {
         this.logger.warn(
           `[kakaoLogin] Invalid redirect_uri "${redirectUri}". Using default "${finalRedirectUri}".`,
         );
@@ -91,7 +91,7 @@ export class AuthController {
       // Basic validation to ensure the URL is not malformed
       new URL(redirectUrl);
       this.logger.debug(`[kakaoLoginCallback] Valid redirect URL: ${redirectUrl}`);
-    } catch (error) {
+    } catch {
       this.logger.error(
         `[kakaoLoginCallback] Invalid or missing state. Using default redirect.`,
       );

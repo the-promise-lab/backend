@@ -15,7 +15,6 @@ import { CharacterGroupDto } from './dto/character-group.dto';
 import { SetupInfoDto } from './dto/setup-info.dto';
 import { GameSessionDto } from './dto/game-session.dto';
 import { CreateGameSessionDto } from './dto/create-game-session.dto';
-import { EventDto } from './dto/event.dto';
 import { InventoryDto } from './dto/inventory.dto';
 
 @ApiTags('game')
