@@ -99,8 +99,8 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://43.200.235.94.nip.io',
       'https://43.200.235.94.nip.io',
-      'https://bag-to-the-dev.vercel.app/',
-      'https://bag-to-the-future.vercel.app/',
+      'https://bag-to-the-dev.vercel.app',
+      'https://bag-to-the-future.vercel.app',
     ],
     credentials: true,
   });
