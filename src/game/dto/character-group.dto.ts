@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsInt, IsString, IsPositive } from 'class-validator';
 
 export class CharacterGroupDto {
   @ApiProperty({ example: 1 })
