@@ -5,7 +5,9 @@ export class PlayingCharacterSetDto {
   @ApiProperty()
   id: number;
   @ApiProperty()
-  characterGroupId: number;
+  gameSessionId: number;
+  @ApiProperty({ nullable: true })
+  characterGroupId: number | null;
   @ApiProperty({ type: [PlayingCharacterDto] })
   playingCharacter: PlayingCharacterDto[];
 }

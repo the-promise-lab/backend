@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
-import { SubmitInventoryDto } from './dto/submit-inventory.dto';
+import { SubmitGameSessionInventoryDto } from './dto/submit-game-session-inventory.dto';
 
 @Injectable()
 export class GameService {
@@ -23,13 +23,9 @@ export class GameService {
             },
           },
         },
-        inventory: {
+        gameSessionInventory: {
           include: {
-            slots: {
-              include: {
-                item: true,
-              },
-            },
+            item: true,
           },
         },
       },
@@ -40,13 +36,20 @@ export class GameService {
     }
 
     return {
+      ...session,
       id: Number(session.id),
       userId: Number(session.userId),
+      characterGroupId: session.characterGroupId
+        ? Number(session.characterGroupId)
+        : null,
+      bagId: Number(session.bagId),
+      currentDayId: session.currentDayId ? Number(session.currentDayId) : null,
       currentActId: session.currentActId ? Number(session.currentActId) : null,
-      createdAt: session.createdAt,
+      endingId: session.endingId ? Number(session.endingId) : null,
       playingCharacterSet: session.playingCharacterSet
         ? {
             id: Number(session.playingCharacterSet.id),
+            gameSessionId: Number(session.playingCharacterSet.gameSessionId),
             characterGroupId: Number(
               session.playingCharacterSet.characterGroupId,
             ),
@@ -54,40 +57,18 @@ export class GameService {
               (pc) => ({
                 id: Number(pc.id),
                 playingCharacterSetId: Number(pc.playingCharacterSetId),
-                character: {
-                  ...pc.character,
-                  id: BigInt(pc.character.id),
-                  characterGroupId: pc.character.characterGroupId
-                    ? BigInt(pc.character.characterGroupId)
-                    : null,
-                },
+                characterId: Number(pc.characterId),
                 currentHp: pc.currentHp,
-                currentSp: pc.currentSp,
+                currentMental: pc.currentMental,
               }),
             ),
           }
         : null,
-      inventory: session.inventory
-        ? {
-            id: Number(session.inventory.id),
-            bagId: Number(session.inventory.bagId),
-            slots: session.inventory.slots.map((slot) => ({
-              id: Number(slot.id),
-              invId: Number(slot.invId),
-              item: {
-                ...slot.item,
-                id: Number(slot.item.id),
-                itemCategoryId: slot.item.itemCategoryId
-                  ? Number(slot.item.itemCategoryId)
-                  : null,
-                storeSectionId: slot.item.storeSectionId
-                  ? Number(slot.item.storeSectionId)
-                  : null,
-              },
-              quantity: slot.quantity,
-            })),
-          }
-        : null,
+      gameSessionInventory: session.gameSessionInventory.map((inv) => ({
+        sessionId: Number(inv.sessionId),
+        itemId: Number(inv.itemId),
+        quantity: inv.quantity,
+      })),
     };
   }
 
@@ -97,17 +78,14 @@ export class GameService {
         where: { userId },
         include: {
           playingCharacterSet: true,
-          inventory: true,
+          gameSessionInventory: true,
         },
       });
 
       if (existingSession) {
-        if (existingSession.inventory) {
-          await tx.slot.deleteMany({
-            where: { invId: existingSession.inventory.id },
-          });
-          await tx.inventory.delete({
-            where: { id: existingSession.inventory.id },
+        if (existingSession.gameSessionInventory) {
+          await tx.gameSessionInventory.deleteMany({
+            where: { sessionId: existingSession.id },
           });
         }
 
@@ -125,16 +103,29 @@ export class GameService {
         await tx.gameSession.delete({ where: { id: existingSession.id } });
       }
 
+      const firstBag = await tx.bag.findFirst();
+      if (!firstBag) {
+        throw new NotFoundException('가방을 찾을 수 없습니다.');
+      }
+
       const session = await tx.gameSession.create({
-        data: { userId },
+        data: { userId, bagId: firstBag.id },
       });
       return {
         ...session,
         id: Number(session.id),
         userId: Number(session.userId),
+        characterGroupId: session.characterGroupId
+          ? Number(session.characterGroupId)
+          : null,
+        bagId: Number(session.bagId),
+        currentDayId: session.currentDayId
+          ? Number(session.currentDayId)
+          : null,
         currentActId: session.currentActId
           ? Number(session.currentActId)
           : null,
+        endingId: session.endingId ? Number(session.endingId) : null,
       };
     });
   }
@@ -142,8 +133,13 @@ export class GameService {
   async getCharacterGroups() {
     const groups = await this.prisma.characterGroup.findMany();
     return groups.map((g) => ({
-      ...g,
       id: Number(g.id),
+      code: g.code,
+      name: g.name,
+      groupSelectImage: g.groupSelectImage,
+      deathEndActId: g.deathEndActId ? Number(g.deathEndActId) : null,
+      prologActId: g.prologActId ? Number(g.prologActId) : null,
+      description: g.description,
     }));
   }
 
@@ -157,13 +153,16 @@ export class GameService {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
     }
 
-    const characters = await this.prisma.character.findMany({
+    const groupMembers = await this.prisma.characterGroupMember.findMany({
       where: {
         characterGroupId: dto.characterGroupId,
       },
+      include: {
+        character: true,
+      },
     });
 
-    if (characters.length === 0) {
+    if (groupMembers.length === 0) {
       throw new NotFoundException('선택한 그룹에 캐릭터가 없습니다.');
     }
 
@@ -185,17 +184,17 @@ export class GameService {
       });
 
       await tx.playingCharacter.createMany({
-        data: characters.map((char) => ({
+        data: groupMembers.map((member) => ({
           playingCharacterSetId: playingSet.id,
-          characterId: char.id,
-          currentHp: char.defaultHp,
-          currentSp: char.defaultSp,
+          characterId: member.characterId,
+          currentHp: member.character.defaultHp,
+          currentMental: member.character.defaultMental,
         })),
       });
 
       const result = await tx.playingCharacterSet.findUnique({
         where: { id: playingSet.id },
-        include: { playingCharacter: { include: { character: true } } },
+        include: { playingCharacter: true },
       });
 
       if (!result) {
@@ -212,13 +211,6 @@ export class GameService {
           id: Number(pc.id),
           playingCharacterSetId: Number(pc.playingCharacterSetId),
           characterId: Number(pc.characterId),
-          character: {
-            ...pc.character,
-            id: BigInt(pc.character.id),
-            characterGroupId: pc.character.characterGroupId
-              ? BigInt(pc.character.characterGroupId)
-              : null,
-          },
         })),
       };
     });
@@ -229,7 +221,7 @@ export class GameService {
       this.prisma.bag.findMany(),
       this.prisma.storeSection.findMany({
         include: {
-          items: true,
+          item: true,
         },
       }),
     ]);
@@ -242,10 +234,9 @@ export class GameService {
     const mappedStoreSections = storeSections.map((section) => ({
       ...section,
       id: Number(section.id),
-      items: section.items.map((item) => ({
+      items: section.item.map((item) => ({
         ...item,
         id: Number(item.id),
-        itemCategoryId: item.itemCategoryId ? Number(item.itemCategoryId) : null,
         storeSectionId: item.storeSectionId ? Number(item.storeSectionId) : null,
       })),
     }));
@@ -255,7 +246,7 @@ export class GameService {
 
 
 
-  async submitInventory(userId: number, dto: SubmitInventoryDto) {
+  async submitGameSessionInventory(userId: number, dto: SubmitGameSessionInventoryDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
       where: { userId },
       select: { id: true },
@@ -265,56 +256,25 @@ export class GameService {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const existingInventory = await tx.inventory.findUnique({
-        where: { gameSessionId: gameSession.id },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.gameSessionInventory.deleteMany({
+        where: { sessionId: gameSession.id },
       });
 
-      if (existingInventory) {
-        await tx.slot.deleteMany({ where: { invId: existingInventory.id } });
-        await tx.inventory.delete({ where: { id: existingInventory.id } });
-      }
-
-      const inventory = await tx.inventory.create({
-        data: {
-          gameSessionId: gameSession.id,
-          bagId: dto.bagId,
-          slots: {
-            create: dto.slots,
-          },
-        },
-        include: {
-          slots: {
-            include: {
-              item: true,
-            },
-          },
-        },
+      await tx.gameSession.update({
+        where: { id: gameSession.id },
+        data: { bagId: dto.bagId },
       });
 
-      const mappedInventory = {
-        ...inventory,
-        id: Number(inventory.id),
-        gameSessionId: Number(inventory.gameSessionId),
-        bagId: Number(inventory.bagId),
-        slots: inventory.slots.map((slot) => ({
-          ...slot,
-          id: Number(slot.id),
-          invId: Number(slot.invId),
-          item: {
-            ...slot.item,
-            id: Number(slot.item.id),
-            itemCategoryId: slot.item.itemCategoryId
-              ? Number(slot.item.itemCategoryId)
-              : null,
-            storeSectionId: slot.item.storeSectionId
-              ? Number(slot.item.storeSectionId)
-              : null,
-          },
+      await tx.gameSessionInventory.createMany({
+        data: dto.items.map((item) => ({
+          sessionId: gameSession.id,
+          itemId: item.itemId,
+          quantity: item.quantity,
         })),
-      };
-
-      return mappedInventory;
+      });
     });
+
+    return this.findGameSession(userId);
   }
 }

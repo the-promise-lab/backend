@@ -1,15 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsInt } from 'class-validator';
 
 export class CreateGameSessionDto {
   @ApiProperty({ example: 1 })
-  id: number;
-
-  @ApiProperty({ example: 1 })
+  @IsInt()
   userId: number;
 
-  @ApiProperty({ example: null, nullable: true })
-  currentActId: number | null;
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  characterGroupId: number;
 
-  @ApiProperty()
-  createdAt: Date;
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  bagId: number;
 }

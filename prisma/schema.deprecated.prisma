@@ -1,0 +1,259 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id    BigInt  @id @default(autoincrement())
+  email String? @unique // 소셜로그인 시 이메일이 없을 수 있으므로 Nullable
+  name  String?
+
+  // 소셜 로그인 정보
+  snsId    String? // 일반 가입 시에는 snsId가 없으므로 Nullable
+  provider String? // 일반 가입 시에는 provider가 없으므로 Nullable
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gameSessions GameSession[]
+
+  // 소셜 로그인 사용자를 위한 복합 고유 키
+  @@unique([snsId, provider])
+  @@map("users")
+}
+
+model GameSession {
+  id           BigInt   @id @default(autoincrement())
+  userId       BigInt
+  currentActId BigInt?
+  dayCount     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user                User                 @relation(fields: [userId], references: [id])
+  currentAct          Act?                 @relation(fields: [currentActId], references: [id])
+  playingCharacterSet PlayingCharacterSet?
+  inventory           Inventory?
+
+  @@map("game_sessions")
+}
+
+model Inventory {
+  id            BigInt    @id @default(autoincrement())
+  gameSessionId BigInt    @unique
+  bagId         BigInt?
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id])
+  bag         Bag?        @relation(fields: [bagId], references: [id])
+  slots       Slot[]
+
+  @@map("inventories")
+}
+
+model Item {
+  id             BigInt        @id @default(autoincrement()) @map("ItemID")
+  name           String        @map("ItemName")
+  image          String?       @map("ItemImage")
+  capacityCost   Int?          @map("CapacityCost")
+  isConsumable   Boolean?      @map("IsConsumable")
+  storeSectionId BigInt?
+  storeSection   StoreSection? @relation(fields: [storeSectionId], references: [id])
+  isVisable      Boolean?      @map("IsVisable")
+  itemCategoryId BigInt?       @map("ItemCategoryID")
+  necessity      Int?          @map("necessity")
+
+  itemCategory  ItemCategory? @relation(fields: [itemCategoryId], references: [id])
+  slots         Slot[]
+  triggeredActs Act[]
+
+  @@map("items")
+}
+
+model PlayingCharacterSet {
+  id               BigInt  @id @default(autoincrement())
+  gameSessionId    BigInt  @unique
+  characterGroupId BigInt?
+
+  gameSession      GameSession        @relation(fields: [gameSessionId], references: [id])
+  characterGroup   CharacterGroup?    @relation(fields: [characterGroupId], references: [id])
+  playingCharacter PlayingCharacter[]
+
+  @@map("playing_character_sets")
+}
+
+model Slot {
+  id       BigInt @id @default(autoincrement())
+  invId    BigInt
+  itemId   BigInt
+  quantity Int
+
+  inventory Inventory @relation(fields: [invId], references: [id])
+  item      Item      @relation(fields: [itemId], references: [id])
+
+  @@map("slots")
+}
+
+model Character {
+  id                BigInt             @id @default(autoincrement()) @map("CharID")
+  name              String?            @map("CharName")
+  age               Int?               @map("CharAge")
+  description       String?            @map("CharDesc")
+  selectImage       String?            @map("CharSelectImage")
+  portraitImage     String?            @map("CharPortraitImage")
+  defaultHp         Int?               @map("HealthDefault")
+  defaultSp         Int?               @map("MentalDefault")
+  characterGroupId  BigInt?            @map("CharacterGroupID")
+  bgColor           String?            @map("CharBGColor")
+  borderColor       String?            @map("CharBorderColor")
+  playingCharacters PlayingCharacter[]
+
+  characterGroup CharacterGroup? @relation(fields: [characterGroupId], references: [id])
+  introEvents1   IntroEvent[]    @relation("IntroChar1")
+  introEvents2   IntroEvent[]    @relation("IntroChar2")
+  introEvents3   IntroEvent[]    @relation("IntroChar3")
+
+  @@map("characters")
+}
+
+model ItemCategory {
+  id    BigInt  @id @default(autoincrement()) @map("ItemCategoryID")
+  name  String?
+  items Item[]
+
+  @@map("item_categories")
+}
+
+model PlayingCharacter {
+  id                    BigInt @id @default(autoincrement())
+  playingCharacterSetId BigInt
+  characterId           BigInt
+  currentHp             Int
+  currentSp             Int
+
+  playingCharacterSet PlayingCharacterSet @relation(fields: [playingCharacterSetId], references: [id])
+  character           Character           @relation(fields: [characterId], references: [id])
+
+  @@map("playing_characters")
+}
+
+model Act {
+  id            BigInt  @id @default(autoincrement())
+  text          String  @db.Text
+  order         Int?
+  triggerItemId BigInt?
+  dayId         BigInt?
+
+  events        Event[]
+  game_sessions GameSession[]
+  day           Day?          @relation(fields: [dayId], references: [id])
+  triggerItem   Item?         @relation(fields: [triggerItemId], references: [id])
+  IntroEvent    IntroEvent[]
+
+  @@map("acts")
+}
+
+model Event {
+  id        BigInt    @id @default(autoincrement())
+  actId     BigInt
+  eventType EventType @map("EventType")
+  order     Int
+  speaker   String
+  script    String    @db.Text
+  position  String
+  emotion   String
+  bgImage   String
+  act       Act       @relation(fields: [actId], references: [id])
+
+  @@map("events")
+}
+
+model Day {
+  id               BigInt         @id @default(autoincrement())
+  day              Int
+  characterGroupId BigInt
+  description      String?
+  characterGroup   CharacterGroup @relation(fields: [characterGroupId], references: [id])
+  acts             Act[]
+
+  @@unique([characterGroupId, day])
+  @@map("days")
+}
+
+model Bag {
+  id          BigInt      @id @default(autoincrement()) @map("BagID")
+  name        String?     @map("BagName")
+  image       String?     @map("BagImageName")
+  capacity    Int?        @map("Capacity")
+  description String?
+  inventories Inventory[]
+
+  @@map("bags")
+}
+
+model CharacterGroup {
+  id                  BigInt                @id @default(autoincrement()) @map("GroupID")
+  name                String?               @map("GroupName")
+  image               String?               @map("GroupSelectImage")
+  deathEndAct         Int?                  @map("DeathEndAct")
+  description         String?               @map("Description")
+  playingCharacterSet PlayingCharacterSet[]
+  characters          Character[]
+  days                Day[]
+
+  @@map("character_groups")
+}
+
+model IntroEvent {
+  id             BigInt    @id @default(autoincrement()) @map("EventID")
+  actId          BigInt    @map("#ActId")
+  desc           String?   @map("#Desc")
+  eventType      EventType @map("EventType")
+  charId1        BigInt?   @map("CharID1")
+  charPosition1  String?   @map("CharPosition1")
+  charEmotion1   String?   @map("CharEmotion1")
+  charSpeakerOX1 Boolean?  @map("CharSpeakerOX1")
+  charId2        BigInt?   @map("CharID2")
+  charPosition2  String?   @map("CharPosition2")
+  charEmotion2   String?   @map("CharEmotion2")
+  charSpeakerOX2 Boolean?  @map("CharSpeakerOX2")
+  charId3        BigInt?   @map("CharID3")
+  charPosition3  String?   @map("CharPosition3")
+  charEmotion3   String?   @map("CharEmotion3")
+  charSpeakerOX3 Boolean?  @map("CharSpeakerOX3")
+  script         String?   @map("Script") @db.Text
+  systemScript   String?   @map("SystemScript")
+  bgImage        String?   @map("BGImage")
+  sceneEffect    String?   @map("SceneEffect")
+  bgm            String?   @map("BGM")
+  bgmVolume      Float?    @map("BgmVolume")
+  se             String?   @map("SE")
+  seVolume       Float?    @map("SEVolume")
+  seLoop         Boolean?  @map("SELoop")
+
+  character1 Character? @relation("IntroChar1", fields: [charId1], references: [id])
+  character2 Character? @relation("IntroChar2", fields: [charId2], references: [id])
+  character3 Character? @relation("IntroChar3", fields: [charId3], references: [id])
+  act        Act?       @relation(fields: [actId], references: [id])
+
+  @@map("intro_events")
+}
+
+model StoreSection {
+  id              BigInt  @id @default(autoincrement())
+  name            String  @unique
+  backgroundImage String?
+  items           Item[]
+
+  @@map("store_sections")
+}
+
+enum EventType {
+  Simple
+  System
+  StoryChoice
+  ItemChoice
+  Status
+}

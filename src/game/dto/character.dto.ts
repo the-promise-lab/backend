@@ -2,7 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class CharacterDto {
   @ApiProperty()
-  id: bigint;
+  id: number;
+
+  @ApiProperty()
+  code: string;
 
   @ApiProperty({ required: false, nullable: true })
   name?: string | null;
@@ -23,10 +26,7 @@ export class CharacterDto {
   defaultHp?: number | null;
 
   @ApiProperty({ required: false, nullable: true })
-  defaultSp?: number | null;
-
-  @ApiProperty({ required: false, nullable: true })
-  characterGroupId?: bigint | null;
+  defaultMental?: number | null;
 
   @ApiProperty({ required: false, nullable: true })
   bgColor?: string | null;

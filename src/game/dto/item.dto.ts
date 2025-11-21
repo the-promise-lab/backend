@@ -16,7 +16,7 @@ export class ItemDto {
   @ApiProperty()
   isVisable: boolean;
   @ApiProperty()
-  itemCategoryId: number;
+  positionX: number;
   @ApiProperty()
-  necessity: number;
+  positionY: number;
 }

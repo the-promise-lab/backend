@@ -6,14 +6,17 @@ export class BagDto {
   @IsInt()
     id: number;
 
-  @ApiProperty({ example: '기본 배낭', description: '가방 이름' })
-  @IsString()
+    @ApiProperty({ example: '기본 배낭', description: '가방 이름' })
+    @IsString()
     name: string;
-
-  @ApiProperty({ example: 'bag.png', description: '가방 이미지' })
-  @IsString()
+  
+    @ApiProperty({ example: 'bag_1', description: '가방 코드' })
+    @IsString()
+    code: string;
+  
+    @ApiProperty({ example: 'bag.png', description: '가방 이미지' })
+    @IsString()
     image: string;
-
   @ApiProperty({ example: 10, description: '가방 용량' })
   @IsInt()
   @IsPositive()

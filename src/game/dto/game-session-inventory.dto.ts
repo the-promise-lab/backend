@@ -1,12 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt } from 'class-validator';
 
-export class CreateSlotDto {
-  @ApiProperty({ example: 1, description: '아이템 ID' })
+export class GameSessionInventoryDto {
+  @ApiProperty()
+  @IsInt()
+  sessionId: number;
+
+  @ApiProperty()
   @IsInt()
   itemId: number;
 
-  @ApiProperty({ example: 1, description: '수량' })
+  @ApiProperty()
   @IsInt()
   quantity: number;
 }

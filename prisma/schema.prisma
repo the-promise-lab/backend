@@ -7,253 +7,523 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id    BigInt  @id @default(autoincrement())
-  email String? @unique // 소셜로그인 시 이메일이 없을 수 있으므로 Nullable
-  name  String?
+model storeSection {
+  id          BigInt   @id @default(autoincrement())
+  code        String   @unique @db.VarChar(100)
+  displayName String   @db.VarChar(255)
+  createdAt   DateTime @default(now()) @db.DateTime()
+  item        item[]
 
-  // 소셜 로그인 정보
-  snsId    String? // 일반 가입 시에는 snsId가 없으므로 Nullable
-  provider String? // 일반 가입 시에는 provider가 없으므로 Nullable
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  gameSessions GameSession[]
-
-  // 소셜 로그인 사용자를 위한 복합 고유 키
-  @@unique([snsId, provider])
-  @@map("users")
+  @@map("storeSection")
 }
 
-model GameSession {
-  id           BigInt   @id @default(autoincrement())
-  userId       BigInt
-  currentActId BigInt?
-  dayCount     Int      @default(0)
-  createdAt    DateTime @default(now())
+model itemCategory {
+  id             BigInt           @id @default(autoincrement())
+  korName        String           @db.VarChar(255)
+  engName        String?          @db.VarChar(255)
+  itemToCategory itemToCategory[]
+  choiceOption   choiceOption[]
 
-  user                User                 @relation(fields: [userId], references: [id])
-  currentAct          Act?                 @relation(fields: [currentActId], references: [id])
-  playingCharacterSet PlayingCharacterSet?
-  inventory           Inventory?
-
-  @@map("game_sessions")
+  @@map("itemCategory")
 }
 
-model Inventory {
-  id            BigInt    @id @default(autoincrement())
-  gameSessionId BigInt    @unique
-  bagId         BigInt?
+model item {
+  id                   BigInt                 @id @default(autoincrement())
+  name                 String                 @db.VarChar(255)
+  capacityCost         Int                    @default(1)
+  image                String?                @db.VarChar(255)
+  isConsumable         Boolean?               @default(true)
+  isVisable            Boolean?               @default(true)
+  storeSectionId       BigInt?
+  positionX            Float?                 @db.Double
+  positionY            Float?                 @db.Double
+  storeSection         storeSection?          @relation(fields: [storeSectionId], references: [id])
+  itemToCategory       itemToCategory[]
+  eventStatus          eventStatus[]
+  gameSessionInventory gameSessionInventory[]
 
-  gameSession GameSession @relation(fields: [gameSessionId], references: [id])
-  bag         Bag?        @relation(fields: [bagId], references: [id])
-  slots       Slot[]
-
-  @@map("inventories")
+  @@index([storeSectionId], map: "idx_item_store_section")
+  @@map("item")
 }
 
-model Item {
-  id             BigInt        @id @default(autoincrement()) @map("ItemID")
-  name           String        @map("ItemName")
-  image          String?       @map("ItemImage")
-  capacityCost   Int?          @map("CapacityCost")
-  isConsumable   Boolean?      @map("IsConsumable")
-  storeSectionId BigInt?
-  storeSection   StoreSection? @relation(fields: [storeSectionId], references: [id])
-  isVisable      Boolean?      @map("IsVisable")
-  itemCategoryId BigInt?       @map("ItemCategoryID")
-  necessity      Int?          @map("necessity")
+model itemToCategory {
+  itemId     BigInt
+  categoryId BigInt
+  item       item         @relation(fields: [itemId], references: [id])
+  category   itemCategory @relation(fields: [categoryId], references: [id])
 
-  itemCategory  ItemCategory? @relation(fields: [itemCategoryId], references: [id])
-  slots         Slot[]
-  triggeredActs Act[]
-
-  @@map("items")
+  @@id([itemId, categoryId])
+  @@map("itemToCategory")
 }
 
-model PlayingCharacterSet {
-  id               BigInt  @id @default(autoincrement())
-  gameSessionId    BigInt  @unique
+model bag {
+  id          BigInt        @id @default(autoincrement())
+  code        String        @unique @db.VarChar(255)
+  name        String        @db.VarChar(255)
+  capacity    Int
+  image       String?       @db.VarChar(255)
+  description String?       @db.VarChar(255)
+  gameSession gameSession[]
+
+  @@map("bag")
+}
+
+model user {
+  id           BigInt        @id @default(autoincrement())
+  email        String?       @unique @db.VarChar(255)
+  name         String?       @db.VarChar(255)
+  snsId        String?       @db.VarChar(255)
+  provider     String?       @db.VarChar(50)
+  createdAt    DateTime?     @default(now()) @db.DateTime()
+  updatedAt    DateTime?     @updatedAt @db.DateTime()
+  gameSessions gameSession[]
+
+  @@unique([snsId, provider], map: "uk_user_sns")
+  @@map("user")
+}
+
+model character {
+  id                   BigInt                 @id @default(autoincrement())
+  code                 String                 @unique @db.VarChar(255)
+  name                 String                 @db.VarChar(255)
+  age                  Int?
+  description          String?                @db.Text
+  selectImage          String?                @db.VarChar(255)
+  portraitImage        String?                @db.VarChar(255)
+  defaultHp            Int?
+  defaultMental        Int?
+  bgColor              String?                @db.VarChar(255)
+  borderColor          String?                @db.VarChar(255)
+  characterGroupMember characterGroupMember[]
+  playingCharacter     playingCharacter[]
+  sessionStatHistory   sessionStatHistory[]
+  eventDialogCharacter eventDialogCharacter[]
+  eventStatusEffect    eventStatusEffect[]
+
+  @@map("character")
+}
+
+model characterGroup {
+  id                   BigInt                 @id @default(autoincrement())
+  code                 String                 @unique @db.VarChar(255)
+  name                 String                 @db.VarChar(255)
+  description          String?                @db.Text
+  groupSelectImage     String?                @db.VarChar(255)
+  deathEndActId        BigInt?
+  prologActId          BigInt?
+  day                  day[]
+  characterGroupMember characterGroupMember[]
+  gameSession          gameSession[]
+  playingCharacterSet  playingCharacterSet[]
+  introSequence        introSequence[]
+  ending               ending[]
+
+  @@map("characterGroup")
+}
+
+model day {
+  id               BigInt         @id @default(autoincrement())
+  characterGroupId BigInt
+  dayNumber        Int
+  characterGroup   characterGroup @relation(fields: [characterGroupId], references: [id])
+  act              act[]
+  gameSession      gameSession[]
+
+  @@map("day")
+}
+
+model characterGroupMember {
+  id               BigInt         @id @default(autoincrement())
+  characterGroupId BigInt
+  characterId      BigInt
+  slotOrder        Int            @db.TinyInt
+  createdAt        DateTime?      @default(now()) @db.DateTime()
+  characterGroup   characterGroup @relation(fields: [characterGroupId], references: [id])
+  character        character      @relation(fields: [characterId], references: [id])
+
+  @@unique([characterGroupId, characterId], map: "uk_group_member")
+  @@unique([characterGroupId, slotOrder], map: "uk_group_member_slot")
+  @@map("characterGroupMember")
+}
+
+model gameSession {
+  id                   BigInt                 @id @default(autoincrement())
+  userId               BigInt
+  characterGroupId     BigInt?
+  bagId                BigInt
+  bagCapacityUsed      Int?
+  bagConfirmedAt       DateTime?              @db.DateTime()
+  status               gameSession_status?    @default(IN_PROGRESS)
+  lifePoint            Int                    @default(0)
+  currentDayId         BigInt?
+  currentActId         BigInt?
+  endingId             BigInt?
+  endedAt              DateTime?              @db.DateTime()
+  createdAt            DateTime?              @default(now()) @db.DateTime()
+  updatedAt            DateTime?              @updatedAt @db.DateTime()
+  user                 user                   @relation(fields: [userId], references: [id])
+  characterGroup       characterGroup?        @relation(fields: [characterGroupId], references: [id])
+  bag                  bag                    @relation(fields: [bagId], references: [id])
+  currentDay           day?                   @relation(fields: [currentDayId], references: [id])
+  currentAct           act?                   @relation(fields: [currentActId], references: [id])
+  ending               ending?                @relation(fields: [endingId], references: [id])
+  playingCharacterSet  playingCharacterSet?
+  sessionStatHistory   sessionStatHistory[]
+  gameSessionInventory gameSessionInventory[]
+  gameSessionHistory   gameSessionHistory[]
+  gameSessionLog       gameSessionLog[]
+
+  @@index([userId], map: "idx_gameSession_user")
+  @@index([characterGroupId], map: "idx_gameSession_group")
+  @@index([bagId], map: "idx_gameSession_bag")
+  @@map("gameSession")
+}
+
+enum gameSession_status {
+  IN_PROGRESS
+  GAME_END
+  GAME_OVER
+  SUDDEN_DEATH
+}
+
+model playingCharacterSet {
+  id               BigInt             @id @default(autoincrement())
+  gameSessionId    BigInt             @unique
   characterGroupId BigInt?
+  createdAt        DateTime?          @default(now()) @db.DateTime()
+  gameSession      gameSession        @relation(fields: [gameSessionId], references: [id])
+  characterGroup   characterGroup?    @relation(fields: [characterGroupId], references: [id])
+  playingCharacter playingCharacter[]
 
-  gameSession      GameSession        @relation(fields: [gameSessionId], references: [id])
-  characterGroup   CharacterGroup?    @relation(fields: [characterGroupId], references: [id])
-  playingCharacter PlayingCharacter[]
-
-  @@map("playing_character_sets")
+  @@map("playingCharacterSet")
 }
 
-model Slot {
-  id       BigInt @id @default(autoincrement())
-  invId    BigInt
-  itemId   BigInt
-  quantity Int
-
-  inventory Inventory @relation(fields: [invId], references: [id])
-  item      Item      @relation(fields: [itemId], references: [id])
-
-  @@map("slots")
-}
-
-model Character {
-  id                BigInt             @id @default(autoincrement()) @map("CharID")
-  name              String?            @map("CharName")
-  age               Int?               @map("CharAge")
-  description       String?            @map("CharDesc")
-  selectImage       String?            @map("CharSelectImage")
-  portraitImage     String?            @map("CharPortraitImage")
-  defaultHp         Int?               @map("HealthDefault")
-  defaultSp         Int?               @map("MentalDefault")
-  characterGroupId  BigInt?            @map("CharacterGroupID")
-  bgColor           String?            @map("CharBGColor")
-  borderColor       String?            @map("CharBorderColor")
-  playingCharacters PlayingCharacter[]
-
-  characterGroup CharacterGroup? @relation(fields: [characterGroupId], references: [id])
-  introEvents1   IntroEvent[]    @relation("IntroChar1")
-  introEvents2   IntroEvent[]    @relation("IntroChar2")
-  introEvents3   IntroEvent[]    @relation("IntroChar3")
-
-  @@map("characters")
-}
-
-model ItemCategory {
-  id    BigInt  @id @default(autoincrement()) @map("ItemCategoryID")
-  name  String?
-  items Item[]
-
-  @@map("item_categories")
-}
-
-model PlayingCharacter {
-  id                    BigInt @id @default(autoincrement())
+model playingCharacter {
+  id                    BigInt              @id @default(autoincrement())
   playingCharacterSetId BigInt
   characterId           BigInt
   currentHp             Int
-  currentSp             Int
+  currentMental         Int
+  playingCharacterSet   playingCharacterSet @relation(fields: [playingCharacterSetId], references: [id])
+  character             character           @relation(fields: [characterId], references: [id])
 
-  playingCharacterSet PlayingCharacterSet @relation(fields: [playingCharacterSetId], references: [id])
-  character           Character           @relation(fields: [characterId], references: [id])
-
-  @@map("playing_characters")
+  @@unique([playingCharacterSetId, characterId], map: "uk_playing_character")
+  @@map("playingCharacter")
 }
 
-model Act {
-  id            BigInt  @id @default(autoincrement())
-  text          String  @db.Text
-  order         Int?
-  triggerItemId BigInt?
-  dayId         BigInt?
+model sessionStatHistory {
+  id                BigInt                      @id @default(autoincrement())
+  sessionId         BigInt
+  statType          sessionStatHistory_statType
+  targetCharacterId BigInt?
+  delta             Int
+  sourceEventId     BigInt?
+  createdAt         DateTime?                   @default(now()) @db.DateTime()
+  session           gameSession                 @relation(fields: [sessionId], references: [id])
+  targetCharacter   character?                  @relation(fields: [targetCharacterId], references: [id])
+  sourceEvent       event?                      @relation(fields: [sourceEventId], references: [id])
 
-  events        Event[]
-  game_sessions GameSession[]
-  day           Day?          @relation(fields: [dayId], references: [id])
-  triggerItem   Item?         @relation(fields: [triggerItemId], references: [id])
-  IntroEvent    IntroEvent[]
-
-  @@map("acts")
+  @@index([sessionId], map: "idx_session_stat_history_session")
+  @@index([targetCharacterId], map: "idx_session_stat_history_character")
+  @@map("sessionStatHistory")
 }
 
-model Event {
-  id        BigInt    @id @default(autoincrement())
-  actId     BigInt
-  eventType EventType @map("EventType")
-  order     Int
-  speaker   String
-  script    String    @db.Text
-  position  String
-  emotion   String
-  bgImage   String
-  act       Act       @relation(fields: [actId], references: [id])
-
-  @@map("events")
+enum sessionStatHistory_statType {
+  HP
+  MENTAL
+  LIFE_POINT
+  ITEM_QUANTITY
 }
 
-model Day {
-  id               BigInt         @id @default(autoincrement())
-  day              Int
-  characterGroupId BigInt
-  description      String?
-  characterGroup   CharacterGroup @relation(fields: [characterGroupId], references: [id])
-  acts             Act[]
+model act {
+  id                 BigInt               @id @default(autoincrement())
+  code               String               @unique @db.VarChar(20)
+  actType            act_actType          @default(MAIN)
+  dayId              BigInt
+  sequenceNumber     Int
+  title              String?              @db.VarChar(255)
+  description        String?              @db.Text
+  triggerItemId      BigInt?
+  day                day                  @relation(fields: [dayId], references: [id])
+  gameSession        gameSession[]
+  actEvent           actEvent[]
+  choiceEvent        choiceEvent?
+  choiceOption       choiceOption[]
+  gameSessionHistory gameSessionHistory[]
 
-  @@unique([characterGroupId, day])
-  @@map("days")
+  @@index([dayId, sequenceNumber], map: "idx_act_day_seq")
+  @@map("act")
 }
 
-model Bag {
-  id          BigInt      @id @default(autoincrement()) @map("BagID")
-  name        String?     @map("BagName")
-  image       String?     @map("BagImageName")
-  capacity    Int?        @map("Capacity")
-  description String?
-  inventories Inventory[]
-
-  @@map("bags")
+enum act_actType {
+  INTRO
+  MAIN
+  ENDING
+  DEATH
 }
 
-model CharacterGroup {
-  id                  BigInt                @id @default(autoincrement()) @map("GroupID")
-  name                String?               @map("GroupName")
-  image               String?               @map("GroupSelectImage")
-  deathEndAct         Int?                  @map("DeathEndAct")
-  description         String?               @map("Description")
-  playingCharacterSet PlayingCharacterSet[]
-  characters          Character[]
-  days                Day[]
+model introSequence {
+  id                 BigInt               @id @default(autoincrement())
+  characterGroupId   BigInt
+  introMode          Int                  @db.TinyInt
+  title              String?              @db.VarChar(255)
+  createdAt          DateTime?            @default(now()) @db.DateTime()
+  characterGroup     characterGroup       @relation(fields: [characterGroupId], references: [id])
+  introSequenceEvent introSequenceEvent[]
 
-  @@map("character_groups")
+  @@unique([characterGroupId, introMode], map: "uk_intro_sequence_group_mode")
+  @@map("introSequence")
 }
 
-model IntroEvent {
-  id             BigInt    @id @default(autoincrement()) @map("EventID")
-  actId          BigInt    @map("#ActId")
-  desc           String?   @map("#Desc")
-  eventType      EventType @map("EventType")
-  charId1        BigInt?   @map("CharID1")
-  charPosition1  String?   @map("CharPosition1")
-  charEmotion1   String?   @map("CharEmotion1")
-  charSpeakerOX1 Boolean?  @map("CharSpeakerOX1")
-  charId2        BigInt?   @map("CharID2")
-  charPosition2  String?   @map("CharPosition2")
-  charEmotion2   String?   @map("CharEmotion2")
-  charSpeakerOX2 Boolean?  @map("CharSpeakerOX2")
-  charId3        BigInt?   @map("CharID3")
-  charPosition3  String?   @map("CharPosition3")
-  charEmotion3   String?   @map("CharEmotion3")
-  charSpeakerOX3 Boolean?  @map("CharSpeakerOX3")
-  script         String?   @map("Script") @db.Text
-  systemScript   String?   @map("SystemScript")
-  bgImage        String?   @map("BGImage")
-  sceneEffect    String?   @map("SceneEffect")
-  bgm            String?   @map("BGM")
-  bgmVolume      Float?    @map("BgmVolume")
-  se             String?   @map("SE")
-  seVolume       Float?    @map("SEVolume")
-  seLoop         Boolean?  @map("SELoop")
+model introSequenceEvent {
+  id              BigInt        @id @default(autoincrement())
+  introSequenceId BigInt
+  eventId         BigInt
+  seqOrder        Int
+  introSequence   introSequence @relation(fields: [introSequenceId], references: [id])
+  event           event         @relation(fields: [eventId], references: [id])
 
-  character1 Character? @relation("IntroChar1", fields: [charId1], references: [id])
-  character2 Character? @relation("IntroChar2", fields: [charId2], references: [id])
-  character3 Character? @relation("IntroChar3", fields: [charId3], references: [id])
-  act        Act?       @relation(fields: [actId], references: [id])
-
-  @@map("intro_events")
+  @@unique([introSequenceId, seqOrder], map: "uk_intro_sequence_event")
+  @@map("introSequenceEvent")
 }
 
-model StoreSection {
-  id              BigInt  @id @default(autoincrement())
-  name            String  @unique
-  backgroundImage String?
-  items           Item[]
+model event {
+  id                 BigInt               @id @default(autoincrement())
+  eventType          event_eventType
+  nextEventId        BigInt?
+  bgImage            String?              @db.VarChar(255)
+  sceneEffect        String?              @db.VarChar(255)
+  bgm                String?              @db.VarChar(255)
+  bgmVolume          Int?
+  se                 String?              @db.VarChar(255)
+  seVolume           Int?
+  seLoop             Boolean?
+  nextEvent          event?               @relation("EventToEvent", fields: [nextEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_events       event[]              @relation("EventToEvent")
+  sessionStatHistory sessionStatHistory[]
+  introSequenceEvent introSequenceEvent[]
+  actEvent           actEvent[]
+  eventDialog        eventDialog?
+  eventChoice        eventChoice?
+  eventStatus        eventStatus?
+  eventSimpleText    eventSimpleText?
+  choiceEvent        choiceEvent[]
+  choiceOption       choiceOption[]
+  endingEvent        endingEvent[]
 
-  @@map("store_sections")
+  @@index([nextEventId], map: "idx_event_next")
+  @@map("event")
 }
 
-enum EventType {
+enum event_eventType {
   Simple
-  System
   StoryChoice
   ItemChoice
   Status
+  System
+}
+
+model actEvent {
+  actId    BigInt
+  eventId  BigInt
+  seqOrder Int
+  act      act    @relation(fields: [actId], references: [id])
+  event    event  @relation(fields: [eventId], references: [id])
+
+  @@id([actId, seqOrder])
+  @@map("actEvent")
+}
+
+model eventDialog {
+  eventId              BigInt                 @id
+  script               String                 @db.Text
+  event                event                  @relation(fields: [eventId], references: [id])
+  eventDialogCharacter eventDialogCharacter[]
+
+  @@map("eventDialog")
+}
+
+model eventDialogCharacter {
+  id            BigInt      @id @default(autoincrement())
+  eventDialogId BigInt
+  characterId   BigInt
+  position      String?     @db.VarChar(50)
+  emotion       String?     @db.VarChar(50)
+  isSpeaker     Boolean?
+  eventDialog   eventDialog @relation(fields: [eventDialogId], references: [eventId])
+  character     character   @relation(fields: [characterId], references: [id])
+
+  @@map("eventDialogCharacter")
+}
+
+model eventChoice {
+  eventId      BigInt  @id
+  choiceTitle  String? @db.VarChar(255)
+  choiceScript String? @db.Text
+  thumbnail    String? @db.VarChar(255)
+  event        event   @relation(fields: [eventId], references: [id])
+
+  @@map("eventChoice")
+}
+
+model eventStatus {
+  eventId           BigInt              @id
+  getItemId         BigInt
+  event             event               @relation(fields: [eventId], references: [id])
+  item              item                @relation(fields: [getItemId], references: [id])
+  eventStatusEffect eventStatusEffect[]
+
+  @@map("eventStatus")
+}
+
+model eventStatusEffect {
+  id            BigInt      @id @default(autoincrement())
+  statusEventId BigInt
+  characterId   BigInt?
+  effectType    String?     @db.VarChar(50)
+  effectValue   String?     @db.VarChar(50)
+  statusEvent   eventStatus @relation(fields: [statusEventId], references: [eventId])
+  character     character?  @relation(fields: [characterId], references: [id])
+
+  @@map("eventStatusEffect")
+}
+
+model eventSimpleText {
+  eventId BigInt @id
+  script  String @db.Text
+  event   event  @relation(fields: [eventId], references: [id])
+
+  @@map("eventSimpleText")
+}
+
+model choiceEvent {
+  id           BigInt         @id @default(autoincrement())
+  actId        BigInt         @unique
+  eventId      BigInt
+  act          act            @relation(fields: [actId], references: [id])
+  event        event          @relation(fields: [eventId], references: [id])
+  choiceOption choiceOption[]
+
+  @@index([eventId], map: "idx_choice_event_event")
+  @@map("choiceEvent")
+}
+
+model choiceOption {
+  id                 BigInt                  @id @default(autoincrement())
+  choiceEventId      BigInt
+  optionOrder        Int                     @default(1)
+  optionType         choiceOption_optionType
+  title              String?                 @db.VarChar(255)
+  itemCategoryId     BigInt?
+  nextActId          BigInt?
+  nextEventId        BigInt?
+  resultType         choiceOption_resultType
+  choiceEvent        choiceEvent             @relation(fields: [choiceEventId], references: [id])
+  itemCategory       itemCategory?           @relation(fields: [itemCategoryId], references: [id])
+  nextAct            act?                    @relation(fields: [nextActId], references: [id])
+  nextEvent          event?                  @relation(fields: [nextEventId], references: [id])
+  gameSessionHistory gameSessionHistory[]
+
+  @@index([choiceEventId, optionOrder], map: "idx_choice_option_event_order")
+  @@map("choiceOption")
+}
+
+enum choiceOption_optionType {
+  STORY
+  ITEM_CATEGORY
+  SKIP
+}
+
+enum choiceOption_resultType {
+  CONTINUE
+  DAY_END
+  GAME_END
+  GAME_OVER
+}
+
+model gameSessionInventory {
+  sessionId BigInt
+  itemId    BigInt
+  quantity  Int
+  session   gameSession @relation(fields: [sessionId], references: [id])
+  item      item        @relation(fields: [itemId], references: [id])
+
+  @@id([sessionId, itemId])
+  @@map("gameSessionInventory")
+}
+
+model gameSessionHistory {
+  id             BigInt       @id @default(autoincrement())
+  sessionId      BigInt
+  actId          BigInt
+  choiceOptionId BigInt
+  itemId         BigInt?
+  createdAt      DateTime?    @default(now()) @db.DateTime()
+  session        gameSession  @relation(fields: [sessionId], references: [id])
+  act            act          @relation(fields: [actId], references: [id])
+  choiceOption   choiceOption @relation(fields: [choiceOptionId], references: [id])
+
+  @@index([sessionId], map: "idx_gs_history_session")
+  @@index([actId], map: "idx_gs_history_act")
+  @@map("gameSessionHistory")
+}
+
+model gameSessionLog {
+  id        BigInt                 @id @default(autoincrement())
+  sessionId BigInt
+  logType   gameSessionLog_logType
+  payload   Json?
+  createdAt DateTime?              @default(now()) @db.DateTime()
+  session   gameSession            @relation(fields: [sessionId], references: [id])
+
+  @@map("gameSessionLog")
+}
+
+enum gameSessionLog_logType {
+  SYSTEM
+  DEBUG
+}
+
+model ending {
+  id               BigInt            @id @default(autoincrement())
+  characterGroupId BigInt
+  priority         Int
+  title            String            @db.VarChar(255)
+  image            String?           @db.VarChar(255)
+  characterGroup   characterGroup    @relation(fields: [characterGroupId], references: [id])
+  gameSession      gameSession[]
+  endingEvent      endingEvent[]
+  endingCondition  endingCondition[]
+
+  @@map("ending")
+}
+
+model endingEvent {
+  id         BigInt @id @default(autoincrement())
+  endingId   BigInt
+  eventId    BigInt
+  eventOrder Int
+  ending     ending @relation(fields: [endingId], references: [id])
+  event      event  @relation(fields: [eventId], references: [id])
+
+  @@map("endingEvent")
+}
+
+model endingCondition {
+  id            BigInt                        @id @default(autoincrement())
+  endingId      BigInt
+  conditionType endingCondition_conditionType
+  targetId      BigInt?
+  statType      String?                       @db.VarChar(50)
+  comparison    String                        @default(">=") @db.VarChar(10)
+  value         Int
+  ending        ending                        @relation(fields: [endingId], references: [id])
+
+  @@map("endingCondition")
+}
+
+enum endingCondition_conditionType {
+  CHARACTER_STAT
+  ITEM
+  SESSION_STAT
 }
