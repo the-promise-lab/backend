@@ -1,25 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ItemDto } from './item.dto';
 import { Type } from 'class-transformer';
-import { IsArray, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsInt, IsString, ValidateNested } from 'class-validator';
 
 export class StoreSectionDto {
-  @ApiProperty()
+  @ApiProperty({ example: 1, description: '상점 섹션 ID' })
+  @IsInt()
   id: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'GroupGrocery', description: '상점 섹션 코드' })
   @IsString()
   code: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: '식료품', description: '상점 섹션 이름' })
   @IsString()
   displayName: string;
 
-  @ApiProperty()
-  @IsString()
-  backgroundImage: string;
-
-  @ApiProperty({ type: [ItemDto] })
+  @ApiProperty({ type: [ItemDto], description: '아이템 목록' })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ItemDto)

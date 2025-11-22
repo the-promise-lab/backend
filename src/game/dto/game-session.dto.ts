@@ -1,41 +1,76 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, ValidateNested } from 'class-validator';
+import { IsArray, IsDate, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { PlayingCharacterSetDto } from './playing-character-set.dto';
 import { GameSessionInventoryDto } from './game-session-inventory.dto';
 
 export class GameSessionDto {
-  @ApiProperty()
+  @ApiProperty({ example: 1, description: '게임 세션 ID' })
+  @IsInt()
   id: number;
-  @ApiProperty()
+
+  @ApiProperty({ example: 1, description: '유저 ID' })
+  @IsInt()
   userId: number;
-  @ApiProperty()
+
+  @ApiProperty({ example: 1, description: '가방 ID' })
+  @IsInt()
   bagId: number;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ example: 10, description: '가방 사용량', nullable: true })
+  @IsInt()
+  @IsOptional()
   bagCapacityUsed: number | null;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ description: '가방 확정 시각', nullable: true })
+  @IsDate()
+  @IsOptional()
   bagConfirmedAt: Date | null;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ example: 'IN_PROGRESS', description: '게임 세션 상태', nullable: true })
+  @IsString()
+  @IsOptional()
   status: string | null;
-  @ApiProperty()
+
+  @ApiProperty({ example: 100, description: '생존 점수' })
+  @IsInt()
   lifePoint: number;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ example: 1, description: '현재 날짜 ID', nullable: true })
+  @IsInt()
+  @IsOptional()
   currentDayId: number | null;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ example: 1, description: '현재 액트 ID', nullable: true })
+  @IsInt()
+  @IsOptional()
   currentActId: number | null;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ example: 1, description: '엔딩 ID', nullable: true })
+  @IsInt()
+  @IsOptional()
   endingId: number | null;
-  @ApiProperty({ nullable: true })
+
+  @ApiProperty({ description: '게임 종료 시각', nullable: true })
+  @IsDate()
+  @IsOptional()
   endedAt: Date | null;
-  @ApiProperty()
+
+  @ApiProperty({ description: '생성 시각' })
+  @IsDate()
   createdAt: Date;
-  @ApiProperty()
+
+  @ApiProperty({ description: '수정 시각' })
+  @IsDate()
   updatedAt: Date;
-  @ApiProperty({ type: PlayingCharacterSetDto, nullable: true })
+
+  @ApiProperty({ type: PlayingCharacterSetDto, nullable: true, description: '플레이 중인 캐릭터 셋' })
   @ValidateNested()
   @Type(() => PlayingCharacterSetDto)
+  @IsOptional()
   playingCharacterSet: PlayingCharacterSetDto | null;
-  @ApiProperty({ type: [GameSessionInventoryDto] })
+
+  @ApiProperty({ type: [GameSessionInventoryDto], description: '게임 세션 인벤토리' })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => GameSessionInventoryDto)
