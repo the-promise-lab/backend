@@ -14,7 +14,6 @@ import {
 import { CharacterGroupDto } from './dto/character-group.dto';
 import { SetupInfoDto } from './dto/setup-info.dto';
 import { GameSessionDto } from './dto/game-session.dto';
-import { CreateGameSessionDto } from './dto/create-game-session.dto';
 
 @ApiTags('game')
 @Controller('game')
@@ -42,9 +41,9 @@ export class GameController {
   @ApiResponse({
     status: 201,
     description: '게임 세션 생성 성공',
-    type: CreateGameSessionDto,
+    type: GameSessionDto,
   })
-  createGameSession(@Req() req): Promise<CreateGameSessionDto> {
+  createGameSession(@Req() req): Promise<GameSessionDto> {
     return this.gameService.createGameSession(req.user.id);
   }
 

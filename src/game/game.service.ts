@@ -1,3 +1,4 @@
+
 import {
   Injectable,
   NotFoundException,
@@ -39,9 +40,6 @@ export class GameService {
       ...session,
       id: Number(session.id),
       userId: Number(session.userId),
-      characterGroupId: session.characterGroupId
-        ? Number(session.characterGroupId)
-        : null,
       bagId: Number(session.bagId),
       currentDayId: session.currentDayId ? Number(session.currentDayId) : null,
       currentActId: session.currentActId ? Number(session.currentActId) : null,
@@ -58,6 +56,10 @@ export class GameService {
                 id: Number(pc.id),
                 playingCharacterSetId: Number(pc.playingCharacterSetId),
                 characterId: Number(pc.characterId),
+                character: {
+                  ...pc.character,
+                  id: Number(pc.character.id),
+                },
                 currentHp: pc.currentHp,
                 currentMental: pc.currentMental,
               }),
@@ -73,7 +75,7 @@ export class GameService {
   }
 
   async createGameSession(userId: number) {
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const existingSession = await tx.gameSession.findFirst({
         where: { userId },
         include: {
@@ -108,26 +110,12 @@ export class GameService {
         throw new NotFoundException('가방을 찾을 수 없습니다.');
       }
 
-      const session = await tx.gameSession.create({
+      await tx.gameSession.create({
         data: { userId, bagId: firstBag.id },
       });
-      return {
-        ...session,
-        id: Number(session.id),
-        userId: Number(session.userId),
-        characterGroupId: session.characterGroupId
-          ? Number(session.characterGroupId)
-          : null,
-        bagId: Number(session.bagId),
-        currentDayId: session.currentDayId
-          ? Number(session.currentDayId)
-          : null,
-        currentActId: session.currentActId
-          ? Number(session.currentActId)
-          : null,
-        endingId: session.endingId ? Number(session.endingId) : null,
-      };
     });
+
+    return this.findGameSession(userId);
   }
 
   async getCharacterGroups() {
@@ -194,7 +182,7 @@ export class GameService {
 
       const result = await tx.playingCharacterSet.findUnique({
         where: { id: playingSet.id },
-        include: { playingCharacter: true },
+        include: { playingCharacter: { include: { character: true } } },
       });
 
       if (!result) {
@@ -211,6 +199,10 @@ export class GameService {
           id: Number(pc.id),
           playingCharacterSetId: Number(pc.playingCharacterSetId),
           characterId: Number(pc.characterId),
+          character: {
+            ...pc.character,
+            id: Number(pc.character.id),
+          },
         })),
       };
     });

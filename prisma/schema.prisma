@@ -11,6 +11,7 @@ model storeSection {
   id          BigInt   @id @default(autoincrement())
   code        String   @unique @db.VarChar(100)
   displayName String   @db.VarChar(255)
+  backgroundImage String? @db.VarChar(255)
   createdAt   DateTime @default(now()) @db.DateTime()
   item        item[]
 
@@ -150,7 +151,7 @@ model gameSession {
   id                   BigInt                 @id @default(autoincrement())
   userId               BigInt
   characterGroupId     BigInt?
-  bagId                BigInt
+  bagId                BigInt?
   bagCapacityUsed      Int?
   bagConfirmedAt       DateTime?              @db.DateTime()
   status               gameSession_status?    @default(IN_PROGRESS)
@@ -163,7 +164,7 @@ model gameSession {
   updatedAt            DateTime?              @updatedAt @db.DateTime()
   user                 user                   @relation(fields: [userId], references: [id])
   characterGroup       characterGroup?        @relation(fields: [characterGroupId], references: [id])
-  bag                  bag                    @relation(fields: [bagId], references: [id])
+  bag                  bag?                   @relation(fields: [bagId], references: [id])
   currentDay           day?                   @relation(fields: [currentDayId], references: [id])
   currentAct           act?                   @relation(fields: [currentActId], references: [id])
   ending               ending?                @relation(fields: [endingId], references: [id])

@@ -15,6 +15,10 @@ export class StoreSectionDto {
   @IsString()
   displayName: string;
 
+  @ApiProperty()
+  @IsString()
+  backgroundImage: string;
+
   @ApiProperty({ type: [ItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
