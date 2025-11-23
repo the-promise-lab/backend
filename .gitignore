@@ -67,3 +67,6 @@ dist/
 
 # ssh
 *.pem
+
+# info
+data/
