@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { IsArray, IsDate, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { PlayingCharacterSetDto } from './playing-character-set.dto';
 import { GameSessionInventoryDto } from './game-session-inventory.dto';
+import { BagDto } from './bag.dto';
 
 export class GameSessionDto {
   @ApiProperty({ example: 1, description: '게임 세션 ID' })
@@ -13,9 +14,10 @@ export class GameSessionDto {
   @IsInt()
   userId: number;
 
-  @ApiProperty({ example: 1, description: '가방 ID' })
-  @IsInt()
-  bagId: number;
+  @ApiProperty({ type: () => BagDto, description: '가방 정보' })
+  @ValidateNested()
+  @Type(() => BagDto)
+  bag: BagDto;
 
   @ApiProperty({ example: 10, description: '가방 사용량', nullable: true })
   @IsInt()
@@ -69,10 +71,10 @@ export class GameSessionDto {
   @Type(() => PlayingCharacterSetDto)
   @IsOptional()
   playingCharacterSet: PlayingCharacterSetDto | null;
-
   @ApiProperty({ type: [GameSessionInventoryDto], description: '게임 세션 인벤토리' })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => GameSessionInventoryDto)
   gameSessionInventory: GameSessionInventoryDto[];
 }
+

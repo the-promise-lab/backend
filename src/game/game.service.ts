@@ -15,6 +15,7 @@ export class GameService {
     const session = await this.prisma.gameSession.findFirst({
       where: { userId },
       include: {
+        bag: true,
         playingCharacterSet: {
           include: {
             playingCharacter: {
@@ -37,13 +38,26 @@ export class GameService {
     }
 
     return {
-      ...session,
       id: Number(session.id),
       userId: Number(session.userId),
-      bagId: Number(session.bagId),
+      bag: {
+        id: Number(session.bag.id),
+        code: session.bag.code,
+        name: session.bag.name,
+        capacity: session.bag.capacity,
+        image: session.bag.image,
+        description: session.bag.description,
+      },
+      bagCapacityUsed: session.bagCapacityUsed,
+      bagConfirmedAt: session.bagConfirmedAt,
+      status: session.status,
+      lifePoint: session.lifePoint,
       currentDayId: session.currentDayId ? Number(session.currentDayId) : null,
       currentActId: session.currentActId ? Number(session.currentActId) : null,
       endingId: session.endingId ? Number(session.endingId) : null,
+      endedAt: session.endedAt,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
       playingCharacterSet: session.playingCharacterSet
         ? {
             id: Number(session.playingCharacterSet.id),
@@ -57,8 +71,17 @@ export class GameService {
                 playingCharacterSetId: Number(pc.playingCharacterSetId),
                 characterId: Number(pc.characterId),
                 character: {
-                  ...pc.character,
                   id: Number(pc.character.id),
+                  code: pc.character.code,
+                  name: pc.character.name,
+                  age: pc.character.age,
+                  description: pc.character.description,
+                  selectImage: pc.character.selectImage,
+                  portraitImage: pc.character.portraitImage,
+                  defaultHp: pc.character.defaultHp,
+                  defaultMental: pc.character.defaultMental,
+                  bgColor: pc.character.bgColor,
+                  borderColor: pc.character.borderColor,
                 },
                 currentHp: pc.currentHp,
                 currentMental: pc.currentMental,
@@ -68,7 +91,19 @@ export class GameService {
         : null,
       gameSessionInventory: session.gameSessionInventory.map((inv) => ({
         sessionId: Number(inv.sessionId),
-        itemId: Number(inv.itemId),
+        item: {
+          id: Number(inv.item.id),
+          name: inv.item.name,
+          image: inv.item.image,
+          capacityCost: inv.item.capacityCost,
+          isConsumable: inv.item.isConsumable,
+          storeSectionId: inv.item.storeSectionId
+            ? Number(inv.item.storeSectionId)
+            : null,
+          isVisable: inv.item.isVisable,
+          positionX: inv.item.positionX,
+          positionY: inv.item.positionY,
+        },
         quantity: inv.quantity,
       })),
     };
@@ -190,19 +225,30 @@ export class GameService {
       }
 
       return {
-        ...result,
         id: Number(result.id),
         gameSessionId: Number(result.gameSessionId),
-        characterGroupId: Number(result.characterGroupId),
+        characterGroupId: result.characterGroupId
+          ? Number(result.characterGroupId)
+          : null,
         playingCharacter: result.playingCharacter.map((pc) => ({
-          ...pc,
           id: Number(pc.id),
           playingCharacterSetId: Number(pc.playingCharacterSetId),
           characterId: Number(pc.characterId),
           character: {
-            ...pc.character,
             id: Number(pc.character.id),
+            code: pc.character.code,
+            name: pc.character.name,
+            age: pc.character.age,
+            description: pc.character.description,
+            selectImage: pc.character.selectImage,
+            portraitImage: pc.character.portraitImage,
+            defaultHp: pc.character.defaultHp,
+            defaultMental: pc.character.defaultMental,
+            bgColor: pc.character.bgColor,
+            borderColor: pc.character.borderColor,
           },
+          currentHp: pc.currentHp,
+          currentMental: pc.currentMental,
         })),
       };
     });
@@ -219,17 +265,31 @@ export class GameService {
     ]);
 
     const mappedBags = bags.map((b) => ({
-      ...b,
       id: Number(b.id),
+      code: b.code,
+      name: b.name,
+      capacity: b.capacity,
+      image: b.image,
+      description: b.description,
     }));
 
     const mappedStoreSections = storeSections.map((section) => ({
-      ...section,
       id: Number(section.id),
+      code: section.code,
+      displayName: section.displayName,
+      backgroundImage: section.backgroundImage,
       items: section.item.map((item) => ({
-        ...item,
         id: Number(item.id),
-        storeSectionId: item.storeSectionId ? Number(item.storeSectionId) : null,
+        name: item.name,
+        image: item.image,
+        capacityCost: item.capacityCost,
+        isConsumable: item.isConsumable,
+        storeSectionId: item.storeSectionId
+          ? Number(item.storeSectionId)
+          : null,
+        isVisable: item.isVisable,
+        positionX: item.positionX,
+        positionY: item.positionY,
       })),
     }));
 
