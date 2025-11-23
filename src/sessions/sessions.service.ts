@@ -20,7 +20,6 @@ import { ChoiceResultMapper } from './utils/choice-result-mapper';
 import { SessionStateMachine } from './utils/session-state-machine';
 import { NextActRequestDto } from './dto/next-act-request.dto';
 import { NextActResponseDto } from './dto/next-act-response.dto';
-import { SessionReportDto } from './dto/session-report.dto';
 import { GameSessionLifecycleService } from '../game/services/game-session-lifecycle.service';
 import { SubmitGameSessionInventoryDto } from '../game/dto/submit-game-session-inventory.dto';
 import { SessionFlowStatus } from './dto/session-flow-status.enum';
@@ -201,35 +200,6 @@ export class SessionsService {
     }
 
     return this.handleActCompletion(session, params.payload);
-  }
-
-  async getSessionReport(
-    sessionId: number,
-    userId: number,
-  ): Promise<SessionReportDto> {
-    const session = await this.prisma.gameSession.findFirst({
-      where: { id: BigInt(sessionId), userId },
-      include: {
-        bag: true,
-        playingCharacterSet: true,
-        gameSessionInventory: {
-          include: { item: true },
-        },
-        gameSessionHistory: true,
-      },
-    });
-
-    if (!session) {
-      throw new NotFoundException({
-        code: 'SESSION_NOT_FOUND',
-        message: '세션을 찾을 수 없습니다.',
-      });
-    }
-
-    throw new BadRequestException({
-      code: 'REPORT_NOT_READY',
-      message: '결과 보고서는 추후 단계에서 구현됩니다.',
-    });
   }
 
   async createOrResetSessionForUser(userId: number): Promise<void> {
