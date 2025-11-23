@@ -134,7 +134,6 @@ export class EventAssembler {
       seVolume: event.seVolume ?? null,
       seLoop: event.seLoop ?? null,
       choice: choiceExtraction.choiceDto,
-      choiceResults: null,
       effects: this.extractCharacterEffects(event),
       itemChanges: this.extractItemChanges(event),
       sessionEffects: this.extractSessionEffects(event),

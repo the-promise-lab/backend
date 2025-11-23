@@ -5,7 +5,6 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
-  IsObject,
   IsOptional,
   IsString,
   ValidateNested,
@@ -115,8 +114,7 @@ export class SessionEventDto {
     isArray: false,
   })
   @IsOptional()
-  @IsObject()
-  choiceResults: Record<string, SessionEventChoiceResultDto> | null;
+  choiceResults?: Record<string, SessionEventChoiceResultDto>;
 
   @ApiProperty({
     type: [SessionEventEffectDto],
