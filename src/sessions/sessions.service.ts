@@ -36,10 +36,17 @@ import {
   NextActItemChangeDto,
 } from './dto/next-act-request.dto';
 import { InventoryItemSummary } from './utils/event-assembler';
+import { IntroRequestDto } from './dto/intro-request.dto';
+import { IntroResponseDto } from './dto/intro-response.dto';
 
 export interface ExecuteNextActParams {
   readonly userId: number;
   readonly payload: NextActRequestDto;
+}
+
+export interface PlayIntroParams {
+  readonly userId: number;
+  readonly payload: IntroRequestDto;
 }
 
 const SESSION_STATE_INCLUDE = {
@@ -88,6 +95,21 @@ type ActWithDay = Prisma.actGetPayload<{
   include: { day: true };
 }>;
 
+const INTRO_SEQUENCE_WITH_EVENTS = {
+  include: {
+    introSequenceEvent: {
+      orderBy: { seqOrder: 'asc' },
+      include: {
+        event: EVENT_WITH_RELATIONS,
+      },
+    },
+  },
+} satisfies Prisma.introSequenceDefaultArgs;
+
+// type IntroSequenceWithEvents = Prisma.introSequenceGetPayload<
+//   typeof INTRO_SEQUENCE_WITH_EVENTS
+// >;
+
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
     item: {
@@ -111,6 +133,51 @@ export class SessionsService {
     private readonly sessionStateMachine: SessionStateMachine,
   ) {}
 
+  async playIntro(params: PlayIntroParams): Promise<IntroResponseDto> {
+    const session = await this.prisma.gameSession.findFirst({
+      where: { userId: params.userId },
+      include: SESSION_STATE_INCLUDE,
+    });
+
+    if (!session) {
+      throw new NotFoundException({
+        code: 'SESSION_NOT_FOUND',
+        message: '게임 세션을 찾을 수 없습니다.',
+      });
+    }
+
+    if (!session.characterGroupId) {
+      throw this.createBadRequest(
+        'CHARACTER_GROUP_MISSING',
+        '세션에 캐릭터 그룹 정보가 없습니다.',
+      );
+    }
+
+    const introSequence = await this.prisma.introSequence.findFirst({
+      where: {
+        characterGroupId: session.characterGroupId,
+        introMode: params.payload.introMode,
+      },
+      include: INTRO_SEQUENCE_WITH_EVENTS.include,
+    });
+
+    if (!introSequence || introSequence.introSequenceEvent.length === 0) {
+      throw new NotFoundException({
+        code: 'INTRO_SEQUENCE_NOT_FOUND',
+        message: '해당 Intro 시퀀스를 찾을 수 없습니다.',
+      });
+    }
+
+    const events = await this.eventAssembler.buildIntroEvents({
+      events: introSequence.introSequenceEvent.map((entry) => entry.event),
+    });
+
+    return {
+      sessionId: session.id.toString(),
+      introMode: params.payload.introMode,
+      events,
+    };
+  }
   async executeNextAct(
     params: ExecuteNextActParams,
   ): Promise<NextActResponseDto> {

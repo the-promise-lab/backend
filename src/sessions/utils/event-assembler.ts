@@ -77,6 +77,10 @@ export interface BuildActEventsResult {
   readonly choiceOptionMap: Record<number, ChoiceOptionRecord[]>;
 }
 
+export interface BuildIntroEventsParams {
+  readonly events: EventWithRelations[];
+}
+
 /**
  * EventAssembler converts raw DB rows into transport-friendly event DTOs.
  */
@@ -137,6 +141,12 @@ export class EventAssembler {
     };
 
     return { dto, choiceOptions: choiceExtraction.choiceOptions };
+  }
+
+  async buildIntroEvents(
+    params: BuildIntroEventsParams,
+  ): Promise<SessionEventDto[]> {
+    return params.events.map((event) => this.mapEvent(event, []).dto);
   }
 
   async buildEventChain(
