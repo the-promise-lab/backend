@@ -9,25 +9,80 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import * as session from 'express-session'; // Import express-session
+import * as MySQLStore from 'express-mysql-session';
+import { URL } from 'url';
+
+// BigInt serialization fix
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap'); // Create a logger instance
+
+  logger.log(`[Env Check] DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/\/.*:.*@/, '//****:****@') : 'Undefined'}`);
+
   const app = await NestFactory.create(AppModule);
 
+  // Correctly set 'trust proxy' by getting the underlying Express adapter instance
+  (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
+
   app.use(cookieParser());
+
+  // Ensure DATABASE_URL is defined
+  if (!process.env.DATABASE_URL) {
+    logger.error('DATABASE_URL environment variable is not defined.');
+    throw new Error('DATABASE_URL is required for database connection.');
+  }
+
+  // Parse DATABASE_URL
+  const dbUrl = new URL(process.env.DATABASE_URL);
+  const dbOptions = {
+    host: dbUrl.hostname,
+    port: Number(dbUrl.port),
+    user: dbUrl.username,
+    password: dbUrl.password,
+    database: dbUrl.pathname.slice(1), // Remove leading '/'
+    createDatabaseTable: true, // 세션 테이블 자동 생성
+    schema: {
+      tableName: 'sessions',
+      columnNames: {
+        session_id: 'session_id',
+        expires: 'expires',
+        data: 'data'
+      }
+    }
+  };
+
+  // Log the DB options (excluding password for security)
+  const dbOptionsForLogging = { ...dbOptions };
+  delete (dbOptionsForLogging as any).password;
+  logger.log(
+    `Initializing MySQL session store with options: ${JSON.stringify(
+      dbOptionsForLogging,
+    )}`,
+  );
+
+  const sessionStore = new (MySQLStore(session as any))(dbOptions);
 
   // Configure express-session
   app.use(
     session({
+      store: sessionStore,
       secret: process.env.SESSION_SECRET || 'your-secret-key', // Use a strong secret from environment variables
       resave: false,
       saveUninitialized: false,
       cookie: {
+        domain: '43.200.235.94.nip.io',
         maxAge: 3600000, // 1 hour
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        secure: true, // Must be true if SameSite=None
+        sameSite: 'none',
       },
     }),
   );
+
+  logger.log('Session middleware initialized.');
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -40,9 +95,16 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: 'http://localhost:3000', // 프론트엔드 서버의 출처
-    credentials: true, // 쿠키를 포함한 요청을 허용
+    origin: [
+      'http://localhost:3000',
+      'http://43.200.235.94.nip.io',
+      'https://43.200.235.94.nip.io',
+      'https://bag-to-the-dev.vercel.app',
+      'https://bag-to-the-future.vercel.app',
+    ],
+    credentials: true,
   });
+
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -76,13 +138,8 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
-  Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/api`,
-    'Bootstrap',
-  );
-  Logger.log(
-    `📚 Swagger API docs available at: http://localhost:${port}/api/docs`,
-    'Bootstrap',
-  );
+  logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
+  logger.log(`📚 Swagger API docs available at: http://localhost:${port}/api/docs`);
 }
 bootstrap();
+
