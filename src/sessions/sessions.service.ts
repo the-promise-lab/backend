@@ -452,22 +452,26 @@ export class SessionsService {
         currentAct,
       );
 
+      if (!nextDayContext) {
+        return this.handleTerminalState(
+          session,
+          SessionFlowStatus.GAME_END,
+          chosenOption,
+        );
+      }
+
       await this.prisma.gameSession.update({
         where: { id: session.id },
         data: {
-          currentActId: nextDayContext?.nextActId ?? null,
-          currentDayId: nextDayContext?.nextDayId ?? null,
+          currentActId: nextDayContext.nextActId,
+          currentDayId: nextDayContext.nextDayId,
           status: gameSession_status.IN_PROGRESS,
         },
       });
 
-      if (!nextDayContext) {
-        flowStatus = SessionFlowStatus.GAME_END;
-      }
-
       return {
         sessionId: session.id.toString(),
-        status: flowStatus,
+        status: SessionFlowStatus.DAY_END,
         day: this.toDayMeta(currentAct.day),
         act: null,
         events: [],
@@ -681,16 +685,30 @@ export class SessionsService {
         );
       }
 
-      const newHp = (target.currentHp ?? 0) + change.hpChange;
-      const newMental = (target.currentMental ?? 0) + change.mentalChange;
+      const updateData: Prisma.playingCharacterUpdateInput = {};
 
-      await tx.playingCharacter.update({
-        where: { id: target.id },
-        data: {
-          currentHp: newHp,
-          currentMental: newMental,
-        },
-      });
+      if (change.hpChange !== 0) {
+        await tx.playingCharacter.updateMany({
+          where: { id: target.id, currentHp: null },
+          data: { currentHp: 0 },
+        });
+        updateData.currentHp = { increment: change.hpChange };
+      }
+
+      if (change.mentalChange !== 0) {
+        await tx.playingCharacter.updateMany({
+          where: { id: target.id, currentMental: null },
+          data: { currentMental: 0 },
+        });
+        updateData.currentMental = { increment: change.mentalChange };
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await tx.playingCharacter.update({
+          where: { id: target.id },
+          data: updateData,
+        });
+      }
 
       if (change.hpChange !== 0) {
         await tx.sessionStatHistory.create({
@@ -728,10 +746,14 @@ export class SessionsService {
     for (const change of changes) {
       const normalizedType = change.statType.toLowerCase();
       if (normalizedType === 'lifepoint') {
+        await tx.gameSession.updateMany({
+          where: { id: session.id, lifePoint: null },
+          data: { lifePoint: 0 },
+        });
         await tx.gameSession.update({
           where: { id: session.id },
           data: {
-            lifePoint: session.lifePoint + change.change,
+            lifePoint: { increment: change.change },
           },
         });
 

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsOptional, IsString, ValidateIf } from 'class-validator';
 
 /**
  * SessionEventEffectDto captures per-character stat changes.
@@ -10,8 +10,9 @@ export class SessionEventEffectDto {
     description: 'Target character code',
     nullable: true,
   })
-  @IsString()
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
   characterCode: string | null;
 
   @ApiProperty({ example: 'health', description: 'Affected stat type' })
@@ -23,8 +24,9 @@ export class SessionEventEffectDto {
     description: 'Delta applied to the stat',
     nullable: true,
   })
-  @IsInt()
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
   change: number | null;
 
   @ApiProperty({
@@ -32,7 +34,8 @@ export class SessionEventEffectDto {
     description: 'Post-change value',
     nullable: true,
   })
-  @IsInt()
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
   newValue: number | null;
 }

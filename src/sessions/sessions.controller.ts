@@ -41,7 +41,7 @@ export class SessionsController {
     @Body() introRequestDto: IntroRequestDto,
   ): Promise<IntroResponseDto> {
     return this.sessionsService.playIntro({
-      userId: Number((req.user as { id: number }).id),
+      userId: Number((req.user as { id: string }).id),
       payload: introRequestDto,
     });
   }
@@ -65,7 +65,7 @@ export class SessionsController {
     @Body() nextActRequestDto: NextActRequestDto,
   ): Promise<NextActResponseDto> {
     return this.sessionsService.executeNextAct({
-      userId: Number((req.user as { id: number }).id),
+      userId: Number((req.user as { id: string }).id),
       payload: nextActRequestDto,
     });
   }

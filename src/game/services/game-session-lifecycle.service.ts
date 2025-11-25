@@ -15,6 +15,11 @@ export class GameSessionLifecycleService {
    */
   async createOrResetSession(userId: number): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      const firstBag = await tx.bag.findFirst();
+      if (!firstBag) {
+        throw new NotFoundException('가방을 찾을 수 없습니다.');
+      }
+
       const existingSession = await tx.gameSession.findFirst({
         where: { userId },
         include: {
@@ -44,11 +49,6 @@ export class GameSessionLifecycleService {
         await tx.gameSession.delete({ where: { id: existingSession.id } });
       }
 
-      const firstBag = await tx.bag.findFirst();
-      if (!firstBag) {
-        throw new NotFoundException('가방을 찾을 수 없습니다.');
-      }
-
       await tx.gameSession.create({
         data: { userId, bagId: firstBag.id },
       });
@@ -62,16 +62,16 @@ export class GameSessionLifecycleService {
     userId: number,
     dto: SubmitGameSessionInventoryDto,
   ): Promise<void> {
-    const gameSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
-      select: { id: true },
-    });
-
-    if (!gameSession) {
-      throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
-    }
-
     await this.prisma.$transaction(async (tx) => {
+      const gameSession = await tx.gameSession.findFirst({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!gameSession) {
+        throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
+      }
+
       await tx.gameSessionInventory.deleteMany({
         where: { sessionId: gameSession.id },
       });
