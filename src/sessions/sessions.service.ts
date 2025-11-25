@@ -791,6 +791,7 @@ export class SessionsService {
 
       const currentQuantity = existing?.quantity ?? 0;
       const newQuantity = Math.max(currentQuantity + change.quantityChange, 0);
+      const actualDelta = newQuantity - currentQuantity;
 
       if (newQuantity === 0) {
         if (existing) {
@@ -820,12 +821,12 @@ export class SessionsService {
         });
       }
 
-      if (change.quantityChange !== 0) {
+      if (actualDelta !== 0) {
         await tx.sessionStatHistory.create({
           data: {
             sessionId: session.id,
             statType: sessionStatHistory_statType.ITEM_QUANTITY,
-            delta: change.quantityChange,
+            delta: actualDelta,
           },
         });
       }

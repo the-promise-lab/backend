@@ -78,7 +78,7 @@ export class GameSessionLifecycleService {
 
       await tx.gameSession.update({
         where: { id: gameSession.id },
-        data: { bagId: dto.bagId },
+        data: { bagId: dto.bagId, bagConfirmedAt: new Date() },
       });
 
       await tx.gameSessionInventory.createMany({
