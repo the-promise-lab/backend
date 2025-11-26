@@ -12,6 +12,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { KakaoAuthGuard } from './guards/kakao-auth.guard';
 
 declare module 'express' {
   interface Request {
@@ -19,6 +20,7 @@ declare module 'express' {
       origin?: string;
       [key: string]: string | string[] | undefined;
     };
+    kakaoRetryRedirectUrl?: string;
   }
 }
 
@@ -34,7 +36,9 @@ export class AuthController {
   @Get('profile')
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Req() req: Request) {
-    this.logger.debug(`[getProfile] User from request: ${JSON.stringify(req.user)}`);
+    this.logger.debug(
+      `[getProfile] User from request: ${JSON.stringify(req.user)}`,
+    );
     // req.user는 JwtStrategy의 validate 함수에서 반환된 값입니다.
     return req.user;
   }
@@ -79,9 +83,16 @@ export class AuthController {
   }
 
   @Get('kakao/callback')
-  @UseGuards(AuthGuard('kakao'))
+  @UseGuards(KakaoAuthGuard)
   async kakaoLoginCallback(@Req() req: Request, @Res() res: Response) {
     this.logger.debug(`[kakaoLoginCallback] Method invoked.`);
+
+    if (req.kakaoRetryRedirectUrl) {
+      this.logger.warn(
+        `[kakaoLoginCallback] Retry triggered. Redirecting to ${req.kakaoRetryRedirectUrl}`,
+      );
+      return res.redirect(req.kakaoRetryRedirectUrl);
+    }
 
     const state = (req.query.state as string) || '';
     let redirectUrl = '';
@@ -89,7 +100,9 @@ export class AuthController {
       redirectUrl = Buffer.from(state, 'base64').toString('utf-8');
       // Basic validation to ensure the URL is not malformed
       new URL(redirectUrl);
-      this.logger.debug(`[kakaoLoginCallback] Valid redirect URL: ${redirectUrl}`);
+      this.logger.debug(
+        `[kakaoLoginCallback] Valid redirect URL: ${redirectUrl}`,
+      );
     } catch {
       this.logger.error(
         `[kakaoLoginCallback] Invalid or missing state. Using default redirect.`,

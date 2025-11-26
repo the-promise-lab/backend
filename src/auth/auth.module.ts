@@ -8,6 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { HttpModule } from '@nestjs/axios'; // Import HttpModule
+import { KakaoAuthGuard } from './guards/kakao-auth.guard';
 
 @Module({
   imports: [
@@ -25,6 +26,12 @@ import { HttpModule } from '@nestjs/axios'; // Import HttpModule
     HttpModule, // Add HttpModule here
   ],
   controllers: [AuthController],
-  providers: [AuthService, KakaoStrategy, JwtStrategy, PrismaService],
+  providers: [
+    AuthService,
+    KakaoStrategy,
+    JwtStrategy,
+    PrismaService,
+    KakaoAuthGuard,
+  ],
 })
 export class AuthModule {}
