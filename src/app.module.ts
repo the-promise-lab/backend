@@ -7,6 +7,7 @@ import { SentryModule, SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { PrismaService } from './prisma/prisma.service';
 import { AuthModule } from './auth/auth.module';
 import { GameModule } from './game/game.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { GameModule } from './game/game.module';
     }),
     AuthModule,
     GameModule,
+    SessionsModule,
   ],
   controllers: [AppController],
   providers: [

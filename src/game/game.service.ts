@@ -1,15 +1,15 @@
-
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
 import { SubmitGameSessionInventoryDto } from './dto/submit-game-session-inventory.dto';
+import { GameSessionLifecycleService } from './services/game-session-lifecycle.service';
 
 @Injectable()
 export class GameService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly gameSessionLifecycleService: GameSessionLifecycleService,
+  ) {}
 
   async findGameSession(userId: number) {
     const session = await this.prisma.gameSession.findFirst({
@@ -110,46 +110,7 @@ export class GameService {
   }
 
   async createGameSession(userId: number) {
-    await this.prisma.$transaction(async (tx) => {
-      const existingSession = await tx.gameSession.findFirst({
-        where: { userId },
-        include: {
-          playingCharacterSet: true,
-          gameSessionInventory: true,
-        },
-      });
-
-      if (existingSession) {
-        if (existingSession.gameSessionInventory) {
-          await tx.gameSessionInventory.deleteMany({
-            where: { sessionId: existingSession.id },
-          });
-        }
-
-        if (existingSession.playingCharacterSet) {
-          await tx.playingCharacter.deleteMany({
-            where: {
-              playingCharacterSetId: existingSession.playingCharacterSet.id,
-            },
-          });
-          await tx.playingCharacterSet.delete({
-            where: { id: existingSession.playingCharacterSet.id },
-          });
-        }
-
-        await tx.gameSession.delete({ where: { id: existingSession.id } });
-      }
-
-      const firstBag = await tx.bag.findFirst();
-      if (!firstBag) {
-        throw new NotFoundException('가방을 찾을 수 없습니다.');
-      }
-
-      await tx.gameSession.create({
-        data: { userId, bagId: firstBag.id },
-      });
-    });
-
+    await this.gameSessionLifecycleService.createOrResetSession(userId);
     return this.findGameSession(userId);
   }
 
@@ -296,37 +257,11 @@ export class GameService {
     return { bags: mappedBags, storeSections: mappedStoreSections };
   }
 
-
-
-  async submitGameSessionInventory(userId: number, dto: SubmitGameSessionInventoryDto) {
-    const gameSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
-      select: { id: true },
-    });
-
-    if (!gameSession) {
-      throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.gameSessionInventory.deleteMany({
-        where: { sessionId: gameSession.id },
-      });
-
-      await tx.gameSession.update({
-        where: { id: gameSession.id },
-        data: { bagId: dto.bagId },
-      });
-
-      await tx.gameSessionInventory.createMany({
-        data: dto.items.map((item) => ({
-          sessionId: gameSession.id,
-          itemId: item.itemId,
-          quantity: item.quantity,
-        })),
-      });
-    });
-
+  async submitGameSessionInventory(
+    userId: number,
+    dto: SubmitGameSessionInventoryDto,
+  ) {
+    await this.gameSessionLifecycleService.confirmInventory(userId, dto);
     return this.findGameSession(userId);
   }
 }
