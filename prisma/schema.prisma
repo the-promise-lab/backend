@@ -369,9 +369,9 @@ model eventChoice {
 
 model eventStatus {
   eventId           BigInt              @id
-  getItemId         BigInt
+  getItemId         BigInt?
   event             event               @relation(fields: [eventId], references: [id])
-  item              item                @relation(fields: [getItemId], references: [id])
+  item              item?               @relation(fields: [getItemId], references: [id])
   eventStatusEffect eventStatusEffect[]
 
   @@map("eventStatus")
