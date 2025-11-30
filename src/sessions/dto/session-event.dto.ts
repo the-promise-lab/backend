@@ -113,15 +113,6 @@ export class SessionEventDto {
   choice: SessionChoiceDto | null;
 
   @ApiProperty({
-    description: '선택지 결과 매핑',
-    required: false,
-    type: () => SessionChoiceOutcomeDto,
-    isArray: false,
-  })
-  @IsOptional()
-  choiceResults?: Record<string, SessionChoiceOutcomeDto>;
-
-  @ApiProperty({
     type: [SessionEventEffectDto],
     description: '캐릭터 스탯 변화',
     required: false,

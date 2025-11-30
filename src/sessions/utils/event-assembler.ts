@@ -139,6 +139,12 @@ export class EventAssembler {
       if (choiceOptions.length > 0) {
         choiceOptionMap[dto.eventId] = choiceOptions;
       }
+      const isChoiceEvent =
+        dto.type === event_eventType.ItemChoice ||
+        dto.type === event_eventType.StoryChoice;
+      if (isChoiceEvent) {
+        break;
+      }
     }
 
     return { events, choiceOptionMap };

@@ -349,7 +349,6 @@ export class SessionsService {
           choiceOptions,
           inventoryItems,
         });
-        event.choiceResults = choiceResults;
         event.choice.outcomes = choiceResults;
       }),
     );
