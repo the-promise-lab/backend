@@ -920,6 +920,7 @@ export class SessionsService {
           Number(relation.categoryId),
         ) ?? [],
       name: record.item.name ?? null,
+      image: record.item.image ?? null,
     }));
   }
 
