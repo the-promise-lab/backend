@@ -396,12 +396,12 @@ export class SessionsService {
         )
       : null;
 
-    // if (payload.choice && !chosenOption) {
-    //   throw this.createBadRequest(
-    //     'CHOICE_NOT_FOUND',
-    //     '선택한 옵션을 찾을 수 없습니다.',
-    //   );
-    // }
+    if (payload.choice && !chosenOption) {
+      throw this.createBadRequest(
+        'CHOICE_NOT_FOUND',
+        '선택한 옵션을 찾을 수 없습니다.',
+      );
+    }
 
     if (payload.choice && chosenOption) {
       await this.prisma.gameSessionHistory.create({
