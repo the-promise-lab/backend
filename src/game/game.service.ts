@@ -162,6 +162,11 @@ export class GameService {
         },
       });
 
+      await tx.gameSession.update({
+        where: { id: gameSession.id },
+        data: { characterGroupId: dto.characterGroupId },
+      });
+
       // Delete old characters and create new ones
       await tx.playingCharacter.deleteMany({
         where: { playingCharacterSetId: playingSet.id },
