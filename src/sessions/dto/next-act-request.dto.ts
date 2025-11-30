@@ -20,7 +20,7 @@ export class NextActChoicePayloadDto {
 }
 
 export class NextActItemChangeDto {
-  @ApiProperty({ example: 97, description: '아이템 ID' })
+  @ApiProperty({ example: 1, description: '아이템 ID' })
   @IsInt()
   itemId: number;
 
