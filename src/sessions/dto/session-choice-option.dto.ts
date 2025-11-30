@@ -27,6 +27,24 @@ export class SessionChoiceOptionDto {
   @IsOptional()
   itemId: number | null;
 
+  @ApiProperty({
+    example: '생수',
+    description: '아이템 이름',
+    nullable: true,
+  })
+  @IsString()
+  @IsOptional()
+  itemName: string | null;
+
+  @ApiProperty({
+    example: 'item_mineral_water.PNG',
+    description: '아이템 이미지 파일명',
+    nullable: true,
+  })
+  @IsString()
+  @IsOptional()
+  itemImage: string | null;
+
   @ApiProperty({ example: 1, description: '소모 수량', nullable: true })
   @IsInt()
   @IsOptional()

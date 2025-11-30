@@ -2,10 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { choiceOption_resultType } from '@prisma/client';
 import { SessionChoiceResultType } from '../dto/session-choice-result-type.enum';
 import { SessionEventDto } from '../dto/session-event.dto';
-import { ChoiceOptionRecord, EventAssembler } from './event-assembler';
+import {
+  ChoiceOptionRecord,
+  EventAssembler,
+  InventoryItemSummary,
+} from './event-assembler';
 
 export interface MapChoiceResultsParams {
   readonly choiceOptions: ChoiceOptionRecord[];
+  readonly inventoryItems: InventoryItemSummary[];
 }
 
 export interface ChoiceResultPayload {
@@ -23,11 +28,19 @@ export class ChoiceResultMapper {
   async mapChoiceResults(
     params: MapChoiceResultsParams,
   ): Promise<Record<string, ChoiceResultPayload>> {
+    const optionIds = params.choiceOptions.map((option) => option.id);
+    const chainMap = await this.eventAssembler.buildChoiceOptionEventChains({
+      choiceOptionIds: optionIds,
+      inventoryItems: params.inventoryItems,
+    });
+
     const entries = await Promise.all(
       params.choiceOptions.map(async (option) => {
-        const events = option.nextEventId
-          ? await this.eventAssembler.buildEventChain(option.nextEventId)
-          : [];
+        let events =
+          chainMap[option.id] ??
+          (option.nextEventId
+            ? await this.eventAssembler.buildEventChain(option.nextEventId)
+            : []);
 
         return [
           option.id.toString(),
