@@ -1,8 +1,11 @@
 name: CD
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       image_tag:
@@ -20,238 +23,262 @@ concurrency:
 
 jobs:
   deploy:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-
     steps:
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v1.0.3
-      env:
-        ENV_FILE: ${{ secrets.ENV_FILE }}
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        port: 22
-        timeout: 500s
-        command_timeout: 500s
-        envs: ENV_FILE
-        script: |
-          set -Eeuo pipefail
-          IFS=$'\n\t'
-          trap 'code=$?; echo "❗ 배포 스크립트 오류(code=$code)"; exit $code' ERR
-          
-          # 배포할 이미지 태그 결정
-          if [ "${{ github.event_name }}" = "release" ]; then
-            IMAGE_TAG="${{ github.event.release.tag_name }}"
-          else
-            IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
-          fi
-          
-          echo "🚀 배포 시작: thepromise2025/thepromise:$IMAGE_TAG"
-          
-          # Docker가 설치되어 있는지 확인
-          if ! command -v docker &> /dev/null; then
-            echo "❌ Docker가 설치되어 있지 않습니다."
-            exit 1
-          fi
-          
-          # curl 확인 (헬스체크에 필요)
-          if ! command -v curl &> /dev/null; then
-            echo "❌ curl이 설치되어 있지 않습니다."
-            exit 1
-          fi
-          
-          # 최신 이미지 Pull
-          echo "📦 Docker 이미지 다운로드 중..."
-          echo "🎯 대상 이미지: thepromise2025/thepromise:$IMAGE_TAG"
-          
-          # Docker Hub 연결 테스트
-          echo "🌐 Docker Hub 연결 테스트..."
-          docker search thepromise2025 --limit 1 || echo "⚠️ Docker Hub 검색 실패"
-          
-          # 실제 pull 실행
-          echo "⬇️ 이미지 다운로드 시작..."
-          if docker pull thepromise2025/thepromise:$IMAGE_TAG; then
-            echo "✅ 이미지 다운로드 성공!"
-          else
-            echo "❌ 이미지 다운로드 실패!"
-            echo "🔍 현재 이미지 목록:"
-            docker images
-            echo "🔍 Docker Hub 접근 테스트:"
-            curl -I https://hub.docker.com/ || echo "Docker Hub 접근 불가"
-            exit 1
-          fi
-          
-          # 다운로드된 이미지 확인
-          echo "📋 다운로드된 이미지 확인:"
-          docker images thepromise2025/thepromise
-          
-          # 기존 컨테이너 확인 (무중단 배포를 위해 아직 제거하지 않음)
-          CONTAINER_NAME="thepromise-backend"
-          echo "🔍 기존 컨테이너 확인 중..."
-          
-          # 메인 컨테이너 확인 (제거하지 않고 정보만 수집)
-          OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
-          if [ -n "$OLD_CONTAINER_ID" ]; then
-            echo "🔄 기존 메인 컨테이너 발견: $OLD_CONTAINER_ID (유지 중 - 무중단 배포)"
-            echo "📊 기존 컨테이너 상태:"
-            docker ps -f id=$OLD_CONTAINER_ID --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-          else
-            echo "ℹ️ 기존 메인 컨테이너가 없습니다 (첫 배포)"
-          fi
-          
-          # 임시(-new) 컨테이너만 정리 (이전 실패 배포의 잔여물)
-          NEW_CONTAINER_ID_OLD="$(docker ps -aq -f name="^${CONTAINER_NAME}-new$")"
-          if [ -n "$NEW_CONTAINER_ID_OLD" ]; then
-            echo "🧹 이전 실패 배포의 임시 컨테이너 발견: $NEW_CONTAINER_ID_OLD"
-            if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID_OLD" 2>/dev/null)" = "true" ]; then
-              echo "🛑 임시 컨테이너 중지 중..."
-              docker stop "$NEW_CONTAINER_ID_OLD"
+      - name: Determine image tag
+        id: determine_image_tag
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const eventName = context.eventName;
+            if (eventName === 'workflow_dispatch') {
+              const manualTag = (context.payload.inputs?.image_tag ?? '').trim();
+              const imageTag = manualTag.length > 0 ? manualTag : 'latest';
+              core.info(`Using manual image tag: ${imageTag}`);
+              core.setOutput('image_tag', imageTag);
+              core.exportVariable('IMAGE_TAG', imageTag);
+              return;
+            }
+
+            try {
+              const response = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              const latestTag = response.data.tag_name;
+              core.info(`Using latest release tag: ${latestTag}`);
+              core.setOutput('image_tag', latestTag);
+              core.exportVariable('IMAGE_TAG', latestTag);
+            } catch (error) {
+              core.warning(`Failed to fetch latest release: ${error.message}`);
+              core.setOutput('image_tag', 'latest');
+              core.exportVariable('IMAGE_TAG', 'latest');
+            }
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          timeout: 500s
+          command_timeout: 500s
+          envs: ENV_FILE,IMAGE_TAG
+          script: |
+            set -Eeuo pipefail
+            IFS=$'\n\t'
+            trap 'code=$?; echo "❗ 배포 스크립트 오류(code=$code)"; exit $code' ERR
+
+            echo "🚀 배포 시작: thepromise2025/thepromise:$IMAGE_TAG"
+
+            # Docker가 설치되어 있는지 확인
+            if ! command -v docker &> /dev/null; then
+              echo "❌ Docker가 설치되어 있지 않습니다."
+              exit 1
             fi
-            echo "🗑️ 임시 컨테이너 제거 중..."
-            docker rm "$NEW_CONTAINER_ID_OLD"
-            echo "✅ 임시 컨테이너 정리 완료"
-          fi
-          
-          # Blue/Green 배포를 위한 포트 결정
-          CURRENT_PORT=3000
-          NEW_PORT=3001
-          
-          # Nginx 설정에서 backend_active 업스트림 포트를 파싱
-          NGINX_CONFIG="/etc/nginx/sites-available/thepromise-backend"
-          if [ -f "$NGINX_CONFIG" ]; then
-            CURRENT_PORT="$(awk '/upstream[[:space:]]+backend_active[[:space:]]*{/,/}/ { if ($1=="server") { if (match($0,/127\.0\.0\.1:([0-9]+)/,m)) { print m[1]; exit } } }' "$NGINX_CONFIG" || true)"
-          fi
-          if [ "$CURRENT_PORT" = "3000" ]; then
-            NEW_PORT=3001
-          elif [ "$CURRENT_PORT" = "3001" ]; then
-            NEW_PORT=3000
-          else
-            echo "⚠️ backend_active 포트를 파악하지 못했습니다. 기본값(3000->3001)을 사용합니다."
+
+            # curl 확인 (헬스체크에 필요)
+            if ! command -v curl &> /dev/null; then
+              echo "❌ curl이 설치되어 있지 않습니다."
+              exit 1
+            fi
+
+            # 최신 이미지 Pull
+            echo "📦 Docker 이미지 다운로드 중..."
+            echo "🎯 대상 이미지: thepromise2025/thepromise:$IMAGE_TAG"
+
+            # Docker Hub 연결 테스트
+            echo "🌐 Docker Hub 연결 테스트..."
+            docker search thepromise2025 --limit 1 || echo "⚠️ Docker Hub 검색 실패"
+
+            # 실제 pull 실행
+            echo "⬇️ 이미지 다운로드 시작..."
+            if docker pull thepromise2025/thepromise:$IMAGE_TAG; then
+              echo "✅ 이미지 다운로드 성공!"
+            else
+              echo "❌ 이미지 다운로드 실패!"
+              echo "🔍 현재 이미지 목록:"
+              docker images
+              echo "🔍 Docker Hub 접근 테스트:"
+              curl -I https://hub.docker.com/ || echo "Docker Hub 접근 불가"
+              exit 1
+            fi
+
+            # 다운로드된 이미지 확인
+            echo "📋 다운로드된 이미지 확인:"
+            docker images thepromise2025/thepromise
+
+            # 기존 컨테이너 확인 (무중단 배포를 위해 아직 제거하지 않음)
+            CONTAINER_NAME="thepromise-backend"
+            echo "🔍 기존 컨테이너 확인 중..."
+
+            # 메인 컨테이너 확인 (제거하지 않고 정보만 수집)
+            OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
+            if [ -n "$OLD_CONTAINER_ID" ]; then
+              echo "🔄 기존 메인 컨테이너 발견: $OLD_CONTAINER_ID (유지 중 - 무중단 배포)"
+              echo "📊 기존 컨테이너 상태:"
+              docker ps -f id=$OLD_CONTAINER_ID --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            else
+              echo "ℹ️ 기존 메인 컨테이너가 없습니다 (첫 배포)"
+            fi
+
+            # 임시(-new) 컨테이너만 정리 (이전 실패 배포의 잔여물)
+            NEW_CONTAINER_ID_OLD="$(docker ps -aq -f name="^${CONTAINER_NAME}-new$")"
+            if [ -n "$NEW_CONTAINER_ID_OLD" ]; then
+              echo "🧹 이전 실패 배포의 임시 컨테이너 발견: $NEW_CONTAINER_ID_OLD"
+              if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID_OLD" 2>/dev/null)" = "true" ]; then
+                echo "🛑 임시 컨테이너 중지 중..."
+                docker stop "$NEW_CONTAINER_ID_OLD"
+              fi
+              echo "🗑️ 임시 컨테이너 제거 중..."
+              docker rm "$NEW_CONTAINER_ID_OLD"
+              echo "✅ 임시 컨테이너 정리 완료"
+            fi
+
+            # Blue/Green 배포를 위한 포트 결정
             CURRENT_PORT=3000
             NEW_PORT=3001
-          fi
-          
-          echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
-          
-          # .env 파일 생성
-          echo "📝 환경 변수 파일 생성 중..."
-          echo "$ENV_FILE" > /tmp/.env
-          
-          # 새 컨테이너 실행 (임시 이름으로)
-          echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
-          NEW_CONTAINER_ID=$(docker run -d \
-            --name "${CONTAINER_NAME}-new" \
-            -p 127.0.0.1:$NEW_PORT:3000 \
-            --restart unless-stopped \
-            --env-file /tmp/.env \
-            -e NODE_ENV=production \
-            thepromise2025/thepromise:$IMAGE_TAG)
-          
-          # 환경 변수 파일 정리 (보안)
-          rm -f /tmp/.env
-          
-          echo "⏳ 새 컨테이너 헬스체크 대기 중..."
-          echo "🔍 컨테이너 ID: $NEW_CONTAINER_ID"
-          
-          # 컨테이너 상태 먼저 확인
-          echo "📊 컨테이너 상태 확인 중..."
-          docker ps -f id=$NEW_CONTAINER_ID --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-          
-          # 헬스체크 (최대 60초 대기)
-          HEALTH_CHECK_ATTEMPTS=0
-          MAX_ATTEMPTS=20
-          
-          while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            # 컨테이너가 실행 중인지 먼저 확인
-            if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID" 2>/dev/null)" != "true" ]; then
-              echo "❌ 컨테이너가 실행되지 않고 있습니다!"
-              docker logs --tail 50 "$NEW_CONTAINER_ID" || true
-              break
-            fi
-            
-            if curl -f --max-time 3 http://localhost:$NEW_PORT/api/health > /dev/null 2>&1; then
-              echo "✅ 헬스체크 성공!"
-              break
-            fi
-            
-            HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
-            echo "⏳ 헬스체크 시도 $HEALTH_CHECK_ATTEMPTS/$MAX_ATTEMPTS..."
-            
-            # 5번째 시도마다 컨테이너 로그 확인
-            if [ $((HEALTH_CHECK_ATTEMPTS % 5)) -eq 0 ]; then
-              echo "🪵 컨테이너 로그 (최근 10줄):"
-              docker logs --tail 10 "$NEW_CONTAINER_ID" || true
-            fi
-            
-            sleep 3
-          done
-          
-          # 헬스체크 실패시 롤백
-          if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-            echo "❌ 헬스체크 실패! 새 컨테이너를 제거합니다."
-            echo "🪵 새 컨테이너 로그 (최근 200줄):"
-            docker logs --tail 200 "$NEW_CONTAINER_ID" || true
-            docker stop "$NEW_CONTAINER_ID"
-            docker rm "$NEW_CONTAINER_ID"
-            echo "💥 배포가 실패했습니다. 로그를 확인하세요."
-            exit 1
-          fi
-          
-          # Nginx를 통한 트래픽 전환
-          echo "🔄 Nginx 트래픽 전환 중..."
-          SWITCH_SCRIPT="/opt/thepromise/scripts/switch-backend.sh"
-          if [ ! -x "$SWITCH_SCRIPT" ]; then
-            echo "❌ 스크립트를 찾을 수 없거나 실행 권한이 없습니다: $SWITCH_SCRIPT"
-            echo "   /opt/thepromise/scripts 디렉토리에 switch-backend.sh 배포 여부를 확인하세요."
-            exit 1
-          fi
-          sudo "$SWITCH_SCRIPT" "$NEW_PORT" "$CURRENT_PORT"
-          
-          # 전환 성공 후 기존 컨테이너 제거 (이름으로 재탐색하여 신뢰성 향상)
-          EXISTING_CANONICAL_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
-          if [ -n "$EXISTING_CANONICAL_ID" ] && [ "$EXISTING_CANONICAL_ID" != "$NEW_CONTAINER_ID" ]; then
-            echo "🧹 이전 컨테이너 제거 중..."
-            if [ "$(docker inspect -f '{{.State.Running}}' "$EXISTING_CANONICAL_ID" 2>/dev/null)" = "true" ]; then
-              docker stop "$EXISTING_CANONICAL_ID" 2>/dev/null || true
-            fi
-            docker rm "$EXISTING_CANONICAL_ID" 2>/dev/null || true
-          fi
 
-          # 새 컨테이너 이름 변경
-          docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
-          
-          # 사용하지 않는 이미지 정리
-          echo "🧹 사용하지 않는 Docker 이미지 정리 중..."
-          docker image prune -f
-          
-          # 배포 완료 정보 출력
-          echo "🎉 배포 완료!"
-          echo "📊 배포 정보:"
-          echo "   - 이미지: thepromise2025/thepromise:$IMAGE_TAG"
-          echo "   - 컨테이너: $NEW_CONTAINER_ID"
-          echo "   - 포트: $NEW_PORT (Nginx 통해 80으로 전달)"
-          echo "   - 상태: $(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME)"
-          
-          # 최종 상태 확인
-          echo "🔍 최종 상태 확인:"
-          docker ps -f name=$CONTAINER_NAME --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            # Nginx 설정에서 backend_active 업스트림 포트를 파싱
+            NGINX_CONFIG="/etc/nginx/sites-available/thepromise-backend"
+            if [ -f "$NGINX_CONFIG" ]; then
+              CURRENT_PORT="$(awk '/upstream[[:space:]]+backend_active[[:space:]]*{/,/}/ { if ($1=="server") { if (match($0,/127\.0\.0\.1:([0-9]+)/,m)) { print m[1]; exit } } }' "$NGINX_CONFIG" || true)"
+            fi
+            if [ "$CURRENT_PORT" = "3000" ]; then
+              NEW_PORT=3001
+            elif [ "$CURRENT_PORT" = "3001" ]; then
+              NEW_PORT=3000
+            else
+              echo "⚠️ backend_active 포트를 파악하지 못했습니다. 기본값(3000->3001)을 사용합니다."
+              CURRENT_PORT=3000
+              NEW_PORT=3001
+            fi
 
-    - name: Verify deployment
-      if: success()
-      run: |
-        echo "✅ 배포가 성공적으로 완료되었습니다!"
-        if [ "${{ github.event_name }}" = "release" ]; then
-          echo "🏷️ 배포된 버전: ${{ github.event.release.tag_name }}"
-        else
-          echo "🏷️ 배포된 태그: ${{ github.event.inputs.image_tag || 'latest' }}"
-        fi
-        echo "🌐 서비스 URL: http://43.200.235.94 (Nginx 리버스 프록시)"
-        echo "🔍 헬스체크: http://43.200.235.94/api/health"
+            echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
 
-    - name: Notify deployment failure
-      if: failure()
-      run: |
-        echo "❌ 배포가 실패했습니다!"
-        echo "🔍 로그를 확인하여 문제를 파악하세요."
-        echo "🔄 필요시 이전 버전으로 수동 롤백하세요."
+            # .env 파일 생성
+            echo "📝 환경 변수 파일 생성 중..."
+            echo "$ENV_FILE" > /tmp/.env
+
+            # 새 컨테이너 실행 (임시 이름으로)
+            echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
+            NEW_CONTAINER_ID=$(docker run -d \
+              --name "${CONTAINER_NAME}-new" \
+              -p 127.0.0.1:$NEW_PORT:3000 \
+              --restart unless-stopped \
+              --env-file /tmp/.env \
+              -e NODE_ENV=production \
+              thepromise2025/thepromise:$IMAGE_TAG)
+
+            # 환경 변수 파일 정리 (보안)
+            rm -f /tmp/.env
+
+            echo "⏳ 새 컨테이너 헬스체크 대기 중..."
+            echo "🔍 컨테이너 ID: $NEW_CONTAINER_ID"
+
+            # 컨테이너 상태 먼저 확인
+            echo "📊 컨테이너 상태 확인 중..."
+            docker ps -f id=$NEW_CONTAINER_ID --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+            # 헬스체크 (최대 60초 대기)
+            HEALTH_CHECK_ATTEMPTS=0
+            MAX_ATTEMPTS=20
+
+            while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+              # 컨테이너가 실행 중인지 먼저 확인
+              if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID" 2>/dev/null)" != "true" ]; then
+                echo "❌ 컨테이너가 실행되지 않고 있습니다!"
+                docker logs --tail 50 "$NEW_CONTAINER_ID" || true
+                break
+              fi
+              
+              if curl -f --max-time 3 http://localhost:$NEW_PORT/api/health > /dev/null 2>&1; then
+                echo "✅ 헬스체크 성공!"
+                break
+              fi
+              
+              HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
+              echo "⏳ 헬스체크 시도 $HEALTH_CHECK_ATTEMPTS/$MAX_ATTEMPTS..."
+              
+              # 5번째 시도마다 컨테이너 로그 확인
+              if [ $((HEALTH_CHECK_ATTEMPTS % 5)) -eq 0 ]; then
+                echo "🪵 컨테이너 로그 (최근 10줄):"
+                docker logs --tail 10 "$NEW_CONTAINER_ID" || true
+              fi
+              
+              sleep 3
+            done
+
+            # 헬스체크 실패시 롤백
+            if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+              echo "❌ 헬스체크 실패! 새 컨테이너를 제거합니다."
+              echo "🪵 새 컨테이너 로그 (최근 200줄):"
+              docker logs --tail 200 "$NEW_CONTAINER_ID" || true
+              docker stop "$NEW_CONTAINER_ID"
+              docker rm "$NEW_CONTAINER_ID"
+              echo "💥 배포가 실패했습니다. 로그를 확인하세요."
+              exit 1
+            fi
+
+            # Nginx를 통한 트래픽 전환
+            echo "🔄 Nginx 트래픽 전환 중..."
+            SWITCH_SCRIPT="/opt/thepromise/scripts/switch-backend.sh"
+            if [ ! -x "$SWITCH_SCRIPT" ]; then
+              echo "❌ 스크립트를 찾을 수 없거나 실행 권한이 없습니다: $SWITCH_SCRIPT"
+              echo "   /opt/thepromise/scripts 디렉토리에 switch-backend.sh 배포 여부를 확인하세요."
+              exit 1
+            fi
+            sudo "$SWITCH_SCRIPT" "$NEW_PORT" "$CURRENT_PORT"
+
+            # 전환 성공 후 기존 컨테이너 제거 (이름으로 재탐색하여 신뢰성 향상)
+            EXISTING_CANONICAL_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
+            if [ -n "$EXISTING_CANONICAL_ID" ] && [ "$EXISTING_CANONICAL_ID" != "$NEW_CONTAINER_ID" ]; then
+              echo "🧹 이전 컨테이너 제거 중..."
+              if [ "$(docker inspect -f '{{.State.Running}}' "$EXISTING_CANONICAL_ID" 2>/dev/null)" = "true" ]; then
+                docker stop "$EXISTING_CANONICAL_ID" 2>/dev/null || true
+              fi
+              docker rm "$EXISTING_CANONICAL_ID" 2>/dev/null || true
+            fi
+
+            # 새 컨테이너 이름 변경
+            docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
+
+            # 사용하지 않는 이미지 정리
+            echo "🧹 사용하지 않는 Docker 이미지 정리 중..."
+            docker image prune -f
+
+            # 배포 완료 정보 출력
+            echo "🎉 배포 완료!"
+            echo "📊 배포 정보:"
+            echo "   - 이미지: thepromise2025/thepromise:$IMAGE_TAG"
+            echo "   - 컨테이너: $NEW_CONTAINER_ID"
+            echo "   - 포트: $NEW_PORT (Nginx 통해 80으로 전달)"
+            echo "   - 상태: $(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME)"
+
+            # 최종 상태 확인
+            echo "🔍 최종 상태 확인:"
+            docker ps -f name=$CONTAINER_NAME --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+      - name: Verify deployment
+        if: success()
+        run: |
+          echo "✅ 배포가 성공적으로 완료되었습니다!"
+          echo "🏷️ 배포된 태그: ${IMAGE_TAG:-latest}"
+          echo "🌐 서비스 URL: http://43.200.235.94 (Nginx 리버스 프록시)"
+          echo "🔍 헬스체크: http://43.200.235.94/api/health"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ 배포가 실패했습니다!"
+          echo "🔍 로그를 확인하여 문제를 파악하세요."
+          echo "🔄 필요시 이전 버전으로 수동 롤백하세요."
