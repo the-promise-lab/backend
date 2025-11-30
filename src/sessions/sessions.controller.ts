@@ -52,7 +52,7 @@ export class SessionsController {
   @ApiOperation({
     summary: 'Act 진행',
     description:
-      '현재 활성화된 세션의 다음 Act를 조회하거나, 직전 Act 결과를 보고 후 다음 Act를 가져옵니다.',
+      '현재 세션 기준으로 다음 Act를 진행합니다. 직전 Act 결과를 보고한 뒤, 다음 Act 이벤트 번들을 반환합니다. 빈 객체를 보내면 현재 Act 번들을 불러옵니다.',
   })
   @ApiBody({ type: NextActRequestDto })
   @ApiResponse({

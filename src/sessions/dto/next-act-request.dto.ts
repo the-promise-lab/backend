@@ -1,22 +1,33 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsInt,
+  IsEnum,
   IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+export enum SessionStatType {
+  LIFE_POINT = 'LifePoint',
+}
+
 export class NextActChoicePayloadDto {
-  @ApiProperty({ example: 1, description: '선택한 옵션 ID' })
+  @ApiProperty({
+    example: 1,
+    description: '선택한 옵션 ID',
+  })
   @IsInt()
   choiceOptionId: number;
 
-  @ApiProperty({ example: 10, description: '사용한 아이템 ID', nullable: true })
-  @IsInt()
+  @ApiPropertyOptional({
+    example: 10,
+    description: '아이템 선택지에서 소비한 아이템 ID',
+  })
   @IsOptional()
-  chosenItemId: number | null;
+  @IsInt()
+  chosenItemId?: number | null;
 }
 
 export class NextActItemChangeDto {
@@ -44,9 +55,13 @@ export class NextActCharacterStatusChangeDto {
 }
 
 export class NextActSessionStatChangeDto {
-  @ApiProperty({ example: 'LifePoint', description: '세션 스탯 타입' })
-  @IsString()
-  statType: string;
+  @ApiProperty({
+    enum: SessionStatType,
+    example: SessionStatType.LIFE_POINT,
+    description: '세션 스탯 타입',
+  })
+  @IsEnum(SessionStatType)
+  statType: SessionStatType;
 
   @ApiProperty({ example: 1, description: '변화량' })
   @IsInt()
@@ -54,10 +69,15 @@ export class NextActSessionStatChangeDto {
 }
 
 export class NextActUpdatesDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [NextActItemChangeDto],
     description: '아이템 변화',
-    required: false,
+    example: [
+      {
+        itemId: 1,
+        quantityChange: 1,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -65,10 +85,16 @@ export class NextActUpdatesDto {
   @Type(() => NextActItemChangeDto)
   itemChanges?: NextActItemChangeDto[];
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [NextActCharacterStatusChangeDto],
     description: '캐릭터 상태 변화',
-    required: false,
+    example: [
+      {
+        characterCode: 'char_hem',
+        hpChange: 0,
+        mentalChange: 1,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -76,10 +102,15 @@ export class NextActUpdatesDto {
   @Type(() => NextActCharacterStatusChangeDto)
   characterStatusChanges?: NextActCharacterStatusChangeDto[];
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [NextActSessionStatChangeDto],
     description: '세션 통계 변화',
-    required: false,
+    example: [
+      {
+        statType: SessionStatType.LIFE_POINT,
+        change: -1,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -92,25 +123,23 @@ export class NextActUpdatesDto {
  * NextActRequestDto represents the payload sent by the frontend when progressing the story.
  */
 export class NextActRequestDto {
-  @ApiProperty({ example: 10101, description: '직전 Act ID', nullable: true })
-  @IsOptional()
+  @ApiPropertyOptional({ example: 10101, description: '직전 Act ID' })
   @IsInt()
+  @IsOptional()
   lastActId?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: NextActChoicePayloadDto,
-    description: '선택지 보고',
-    required: false,
+    description: '선택지 보고 (선택지를 보여준 경우에만 전송)',
   })
   @IsOptional()
   @ValidateNested()
   @Type(() => NextActChoicePayloadDto)
   choice?: NextActChoicePayloadDto;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: NextActUpdatesDto,
-    description: '프론트 처리 업데이트',
-    required: false,
+    description: '프론트 처리 업데이트(인벤토리/스탯 변화 보고)',
   })
   @IsOptional()
   @ValidateNested()

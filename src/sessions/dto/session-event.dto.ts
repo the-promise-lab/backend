@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { event_eventType } from '@prisma/client';
 import {
   IsArray,
@@ -49,7 +49,10 @@ export class SessionEventDto {
   @IsEnum(event_eventType)
   type: event_eventType;
 
-  @ApiProperty({ example: '헴! 일단 끝까지 좀 들어보입시다.', nullable: true })
+  @ApiPropertyOptional({
+    example: '헴! 일단 끝까지 좀 들어보입시다.',
+    description: '대사/내레이션',
+  })
   @IsString()
   @IsOptional()
   script: string | null;
@@ -63,59 +66,64 @@ export class SessionEventDto {
   @Type(() => SessionEventCharacterDto)
   characters: SessionEventCharacterDto[];
 
-  @ApiProperty({ example: null, description: '배경 이미지', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '배경 이미지' })
   @IsString()
   @IsOptional()
   bgImage: string | null;
 
-  @ApiProperty({ example: null, description: '장면 효과', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '장면 효과' })
   @IsString()
   @IsOptional()
   sceneEffect: string | null;
 
-  @ApiProperty({ example: null, description: '배경음', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '배경음' })
   @IsString()
   @IsOptional()
   bgm: string | null;
 
-  @ApiProperty({ example: null, description: '배경음 볼륨', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '배경음 볼륨' })
   @IsInt()
   @IsOptional()
   bgmVolume: number | null;
 
-  @ApiProperty({ example: null, description: '효과음', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '효과음' })
   @IsString()
   @IsOptional()
   se: string | null;
 
-  @ApiProperty({ example: null, description: '효과음 볼륨', nullable: true })
+  @ApiPropertyOptional({ example: null, description: '효과음 볼륨' })
   @IsInt()
   @IsOptional()
   seVolume: number | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: false,
     description: '효과음 반복 여부',
-    nullable: true,
   })
   @IsOptional()
   @IsBoolean()
   seLoop: boolean | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: resolveSessionChoiceDto,
     description: '선택지 정보',
-    nullable: true,
   })
   @ValidateNested()
   @Type(resolveSessionChoiceDto)
   @IsOptional()
   choice: SessionChoiceDto | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [SessionEventEffectDto],
     description: '캐릭터 스탯 변화',
-    required: false,
+    example: [
+      {
+        characterCode: 'char_hem',
+        effectType: 'health',
+        change: 1,
+        newValue: 101,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -123,10 +131,17 @@ export class SessionEventDto {
   @Type(() => SessionEventEffectDto)
   effects: SessionEventEffectDto[] | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [SessionEventItemChangeDto],
     description: '아이템 변화',
-    required: false,
+    example: [
+      {
+        itemId: 97,
+        itemName: '생수',
+        quantityChange: 1,
+        newQuantity: 2,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -134,10 +149,16 @@ export class SessionEventDto {
   @Type(() => SessionEventItemChangeDto)
   itemChanges: SessionEventItemChangeDto[] | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [SessionEventSessionEffectDto],
     description: '세션 스탯 변화',
-    required: false,
+    example: [
+      {
+        effectType: 'LIFE_POINT',
+        change: -1,
+        newValue: 2,
+      },
+    ],
   })
   @IsOptional()
   @IsArray()
