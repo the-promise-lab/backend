@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import {
   IsArray,
   IsEnum,
@@ -10,6 +10,7 @@ import { Type } from 'class-transformer';
 import { SessionChoiceOptionDto } from './session-choice-option.dto';
 import { SessionChoiceFallbackDto } from './session-choice-fallback.dto';
 import { SessionChoiceType } from './session-choice-type.enum';
+import { SessionChoiceOutcomeDto } from './session-event.dto';
 
 /**
  * SessionChoiceDto bundles metadata and selectable options for the frontend.
@@ -56,4 +57,14 @@ export class SessionChoiceDto {
   @Type(() => SessionChoiceFallbackDto)
   @IsOptional()
   fallback: SessionChoiceFallbackDto | null;
+
+  @ApiProperty({
+    description: '선택지별 결과 이벤트',
+    required: false,
+    additionalProperties: {
+      $ref: getSchemaPath(SessionChoiceOutcomeDto),
+    },
+  })
+  @IsOptional()
+  outcomes?: Record<number, SessionChoiceOutcomeDto>;
 }

@@ -27,6 +27,24 @@ export interface InventoryItemSummary {
   readonly categoryIds: number[];
 }
 
+const CHOICE_OPTION_RELATIONS = {
+  include: {
+    itemCategory: true,
+    eventChain: {
+      select: {
+        seqOrder: true,
+        eventId: true,
+      },
+      orderBy: { seqOrder: 'asc' },
+    },
+  },
+} as const;
+
+const CHOICE_OPTION_INCLUDE = {
+  orderBy: { optionOrder: 'asc' },
+  include: CHOICE_OPTION_RELATIONS.include,
+} as const;
+
 const EVENT_RELATIONS = {
   eventDialog: {
     include: {
@@ -38,6 +56,11 @@ const EVENT_RELATIONS = {
     },
   },
   eventChoice: true,
+  choiceEvent: {
+    include: {
+      choiceOption: CHOICE_OPTION_INCLUDE,
+    },
+  },
   eventStatus: {
     include: {
       eventStatusEffect: {
@@ -49,12 +72,6 @@ const EVENT_RELATIONS = {
     },
   },
   eventSimpleText: true,
-  choiceOption: {
-    orderBy: { optionOrder: 'asc' },
-    include: {
-      itemCategory: true,
-    },
-  },
 } as const;
 
 export const EVENT_WITH_RELATIONS = {
@@ -66,6 +83,14 @@ type EventWithRelations = Prisma.eventGetPayload<typeof EVENT_WITH_RELATIONS>;
 type ActEventWithRelations = Prisma.actEventGetPayload<{
   include: { event: typeof EVENT_WITH_RELATIONS };
 }>;
+
+type ChoiceEventWithOptions = Prisma.choiceEventGetPayload<{
+  include: { choiceOption: typeof CHOICE_OPTION_INCLUDE };
+}>;
+
+type ChoiceOptionWithRelations = Prisma.choiceOptionGetPayload<
+  typeof CHOICE_OPTION_RELATIONS
+>;
 
 export interface BuildActEventsParams {
   readonly actEventRecords: ActEventWithRelations[];
@@ -79,6 +104,11 @@ export interface BuildActEventsResult {
 
 export interface BuildIntroEventsParams {
   readonly events: EventWithRelations[];
+}
+
+export interface BuildChoiceOptionEventChainsParams {
+  readonly choiceOptionIds: number[];
+  readonly inventoryItems: InventoryItemSummary[];
 }
 
 /**
@@ -176,6 +206,43 @@ export class EventAssembler {
     }
 
     return chain;
+  }
+
+  async buildChoiceOptionEventChains(
+    params: BuildChoiceOptionEventChainsParams,
+  ): Promise<Record<number, SessionEventDto[]>> {
+    if (params.choiceOptionIds.length === 0) {
+      return {};
+    }
+
+    const chainEntries = await this.prisma.choiceOptionEventChain.findMany({
+      where: {
+        choiceOptionId: {
+          in: params.choiceOptionIds.map((id) => BigInt(id)),
+        },
+      },
+      orderBy: [{ choiceOptionId: 'asc' }, { seqOrder: 'asc' }],
+      include: {
+        event: EVENT_WITH_RELATIONS,
+      },
+    });
+
+    const grouped = new Map<number, SessionEventDto[]>();
+    for (const entry of chainEntries) {
+      const dto = this.mapEvent(
+        entry.event as EventWithRelations,
+        params.inventoryItems,
+      ).dto;
+      const optionId = Number(entry.choiceOptionId);
+      const bucket = grouped.get(optionId);
+      if (bucket) {
+        bucket.push(dto);
+      } else {
+        grouped.set(optionId, [dto]);
+      }
+    }
+
+    return Object.fromEntries(grouped.entries());
   }
 
   private resolveScript(event: EventWithRelations): string | null {
@@ -276,11 +343,12 @@ export class EventAssembler {
       return { choiceDto: null, choiceOptions: [] };
     }
 
-    const options: SessionChoiceOptionDto[] =
-      event.choiceOption?.map((option) => {
-        const { dto } = this.mapChoiceOption(option, inventoryItems, event);
-        return dto;
-      }) ?? [];
+    const choiceEvent = this.pickChoiceEvent(event.choiceEvent);
+    const optionEntities = choiceEvent?.choiceOption ?? [];
+    const options: SessionChoiceOptionDto[] = optionEntities.map((option) => {
+      const { dto } = this.mapChoiceOption(option, inventoryItems, event);
+      return dto;
+    });
 
     const choiceDto: SessionChoiceDto = {
       title: event.eventChoice?.choiceTitle ?? '',
@@ -294,18 +362,17 @@ export class EventAssembler {
       fallback: null,
     };
 
-    const rawOptions: ChoiceOptionRecord[] =
-      event.choiceOption?.map((option) => ({
-        id: Number(option.id),
-        resultType: option.resultType,
-        nextEventId: option.nextEventId ? Number(option.nextEventId) : null,
-      })) ?? [];
+    const rawOptions: ChoiceOptionRecord[] = optionEntities.map((option) => ({
+      id: Number(option.id),
+      resultType: option.resultType,
+      nextEventId: option.nextEventId ? Number(option.nextEventId) : null,
+    }));
 
     return { choiceDto, choiceOptions: rawOptions };
   }
 
   private mapChoiceOption(
-    option: EventWithRelations['choiceOption'][number],
+    option: ChoiceOptionWithRelations,
     inventoryItems: InventoryItemSummary[],
     event: EventWithRelations,
   ): { dto: SessionChoiceOptionDto; matchedItem: InventoryItemSummary | null } {
@@ -319,6 +386,22 @@ export class EventAssembler {
       );
     }
 
+    const eventChainLength = option.eventChain?.length ?? 0;
+    const hasContinuation =
+      eventChainLength > 0 ||
+      option.nextActId !== null ||
+      option.nextEventId !== null;
+    const hasDisplayText = Boolean(option.title?.trim());
+
+    let isSelectable: boolean;
+    if (isStoryChoice) {
+      isSelectable = hasContinuation && hasDisplayText;
+    } else if (option.optionType === choiceOption_optionType.SKIP) {
+      isSelectable = hasContinuation;
+    } else {
+      isSelectable = hasContinuation && matchedItem !== null;
+    }
+
     const dto: SessionChoiceOptionDto = {
       choiceOptionId: Number(option.id),
       text: option.title ?? '',
@@ -327,10 +410,7 @@ export class EventAssembler {
         : null,
       itemId: matchedItem ? matchedItem.itemId : null,
       quantity: matchedItem ? matchedItem.quantity : null,
-      isSelectable:
-        isStoryChoice || option.optionType === choiceOption_optionType.SKIP
-          ? true
-          : matchedItem !== null,
+      isSelectable,
     };
 
     return { dto, matchedItem };
@@ -346,5 +426,14 @@ export class EventAssembler {
           item.quantity > 0 && item.categoryIds.some((id) => id === categoryId),
       ) ?? null
     );
+  }
+
+  private pickChoiceEvent(
+    events: ChoiceEventWithOptions[] | undefined,
+  ): ChoiceEventWithOptions | null {
+    if (!events || events.length === 0) {
+      return null;
+    }
+    return events[0];
   }
 }

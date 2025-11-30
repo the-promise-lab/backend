@@ -310,6 +310,7 @@ model event {
   eventSimpleText    eventSimpleText?
   choiceEvent        choiceEvent[]
   choiceOption       choiceOption[]
+  choiceOptionEventChain choiceOptionEventChain[]
   endingEvent        endingEvent[]
 
   @@index([nextEventId], map: "idx_event_next")
@@ -424,9 +425,22 @@ model choiceOption {
   nextAct            act?                    @relation(fields: [nextActId], references: [id])
   nextEvent          event?                  @relation(fields: [nextEventId], references: [id])
   gameSessionHistory gameSessionHistory[]
+  eventChain         choiceOptionEventChain[]
 
   @@index([choiceEventId, optionOrder], map: "idx_choice_option_event_order")
   @@map("choiceOption")
+}
+
+model choiceOptionEventChain {
+  choiceOptionId BigInt
+  seqOrder       Int
+  eventId        BigInt
+  choiceOption   choiceOption @relation(fields: [choiceOptionId], references: [id])
+  event          event        @relation(fields: [eventId], references: [id])
+
+  @@id([choiceOptionId, seqOrder])
+  @@index([eventId], map: "idx_choice_option_event_chain_event")
+  @@map("choiceOptionEventChain")
 }
 
 enum choiceOption_optionType {

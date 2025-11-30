@@ -299,14 +299,15 @@ export class SessionsService {
     session: SessionWithState,
     act: ActWithEvents,
   ): Promise<NextActResponseDto> {
+    const inventoryItems = this.mapInventorySummaries(
+      session.gameSessionInventory ?? [],
+    );
     const { events, choiceOptionMap } =
       await this.eventAssembler.buildActEvents({
         actEventRecords: act.actEvent,
-        inventoryItems: this.mapInventorySummaries(
-          session.gameSessionInventory ?? [],
-        ),
+        inventoryItems,
       });
-    await this.populateChoiceResults(events, choiceOptionMap);
+    await this.populateChoiceResults(events, choiceOptionMap, inventoryItems);
 
     return {
       sessionId: session.id.toString(),
@@ -336,6 +337,7 @@ export class SessionsService {
   private async populateChoiceResults(
     events: SessionEventDto[],
     choiceOptionMap: Record<number, ChoiceOptionRecord[]>,
+    inventoryItems: InventoryItemSummary[],
   ): Promise<void> {
     await Promise.all(
       events.map(async (event) => {
@@ -343,9 +345,12 @@ export class SessionsService {
         if (!choiceOptions || !event.choice) {
           return;
         }
-        event.choiceResults = await this.choiceResultMapper.mapChoiceResults({
+        const choiceResults = await this.choiceResultMapper.mapChoiceResults({
           choiceOptions,
+          inventoryItems,
         });
+        event.choiceResults = choiceResults;
+        event.choice.outcomes = choiceResults;
       }),
     );
   }
@@ -392,12 +397,12 @@ export class SessionsService {
         )
       : null;
 
-    if (payload.choice && !chosenOption) {
-      throw this.createBadRequest(
-        'CHOICE_NOT_FOUND',
-        '선택한 옵션을 찾을 수 없습니다.',
-      );
-    }
+    // if (payload.choice && !chosenOption) {
+    //   throw this.createBadRequest(
+    //     'CHOICE_NOT_FOUND',
+    //     '선택한 옵션을 찾을 수 없습니다.',
+    //   );
+    // }
 
     if (payload.choice && chosenOption) {
       await this.prisma.gameSessionHistory.create({
@@ -688,17 +693,19 @@ export class SessionsService {
       const updateData: Prisma.playingCharacterUpdateInput = {};
 
       if (change.hpChange !== 0) {
-        await tx.playingCharacter.updateMany({
-          where: { id: target.id, currentHp: null },
-          data: { currentHp: 0 },
+        this.ensureCharacterStatInitialized({
+          characterCode: change.characterCode,
+          statName: 'HP',
+          currentValue: target.currentHp,
         });
         updateData.currentHp = { increment: change.hpChange };
       }
 
       if (change.mentalChange !== 0) {
-        await tx.playingCharacter.updateMany({
-          where: { id: target.id, currentMental: null },
-          data: { currentMental: 0 },
+        this.ensureCharacterStatInitialized({
+          characterCode: change.characterCode,
+          statName: 'MENTAL',
+          currentValue: target.currentMental,
         });
         updateData.currentMental = { increment: change.mentalChange };
       }
@@ -746,10 +753,7 @@ export class SessionsService {
     for (const change of changes) {
       const normalizedType = change.statType.toLowerCase();
       if (normalizedType === 'lifepoint') {
-        await tx.gameSession.updateMany({
-          where: { id: session.id, lifePoint: null },
-          data: { lifePoint: 0 },
-        });
+        this.ensureLifePointInitialized(session.lifePoint);
         await tx.gameSession.update({
           where: { id: session.id },
           data: {
@@ -920,5 +924,27 @@ export class SessionsService {
 
   private createBadRequest(code: string, message: string): BadRequestException {
     return new BadRequestException({ code, message });
+  }
+
+  private ensureCharacterStatInitialized(params: {
+    characterCode: string;
+    statName: 'HP' | 'MENTAL';
+    currentValue: number | null;
+  }): void {
+    if (params.currentValue === null || params.currentValue === undefined) {
+      throw this.createBadRequest(
+        `${params.statName}_NOT_INITIALIZED`,
+        `캐릭터 ${params.characterCode}의 ${params.statName} 값이 초기화되지 않았습니다.`,
+      );
+    }
+  }
+
+  private ensureLifePointInitialized(currentValue: number | null): void {
+    if (currentValue === null || currentValue === undefined) {
+      throw this.createBadRequest(
+        'LIFE_POINT_NOT_INITIALIZED',
+        '세션의 라이프 포인트가 초기화되지 않았습니다.',
+      );
+    }
   }
 }

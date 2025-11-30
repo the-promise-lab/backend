@@ -11,13 +11,13 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SessionEventCharacterDto } from './session-event-character.dto';
-import { SessionChoiceDto } from './session-choice.dto';
+import type { SessionChoiceDto } from './session-choice.dto';
 import { SessionEventEffectDto } from './session-event-effect.dto';
 import { SessionEventItemChangeDto } from './session-event-item-change.dto';
 import { SessionEventSessionEffectDto } from './session-event-session-effect.dto';
 import { SessionChoiceResultType } from './session-choice-result-type.enum';
 
-class SessionEventChoiceResultDto {
+export class SessionChoiceOutcomeDto {
   @ApiProperty({
     enum: SessionChoiceResultType,
     example: SessionChoiceResultType.ACT_END,
@@ -30,6 +30,11 @@ class SessionEventChoiceResultDto {
   @ValidateNested({ each: true })
   @Type(() => SessionEventDto)
   events: SessionEventDto[];
+}
+
+function resolveSessionChoiceDto(): new () => SessionChoiceDto {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return require('./session-choice.dto').SessionChoiceDto;
 }
 
 /**
@@ -98,23 +103,23 @@ export class SessionEventDto {
   seLoop: boolean | null;
 
   @ApiProperty({
-    type: SessionChoiceDto,
+    type: resolveSessionChoiceDto,
     description: '선택지 정보',
     nullable: true,
   })
   @ValidateNested()
-  @Type(() => SessionChoiceDto)
+  @Type(resolveSessionChoiceDto)
   @IsOptional()
   choice: SessionChoiceDto | null;
 
   @ApiProperty({
     description: '선택지 결과 매핑',
     required: false,
-    type: () => SessionEventChoiceResultDto,
+    type: () => SessionChoiceOutcomeDto,
     isArray: false,
   })
   @IsOptional()
-  choiceResults?: Record<string, SessionEventChoiceResultDto>;
+  choiceResults?: Record<string, SessionChoiceOutcomeDto>;
 
   @ApiProperty({
     type: [SessionEventEffectDto],
