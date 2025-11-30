@@ -919,6 +919,7 @@ export class SessionsService {
         record.item.itemToCategory?.map((relation) =>
           Number(relation.categoryId),
         ) ?? [],
+      name: record.item.name ?? null,
     }));
   }
 

@@ -25,6 +25,7 @@ export interface InventoryItemSummary {
   readonly itemId: number;
   readonly quantity: number;
   readonly categoryIds: number[];
+  readonly name: string | null;
 }
 
 const CHOICE_OPTION_RELATIONS = {
@@ -409,6 +410,7 @@ export class EventAssembler {
         ? Number(option.itemCategoryId)
         : null,
       itemId: matchedItem ? matchedItem.itemId : null,
+      itemName: matchedItem ? matchedItem.name : null,
       quantity: matchedItem ? matchedItem.quantity : null,
       isSelectable,
     };
