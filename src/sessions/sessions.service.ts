@@ -192,10 +192,11 @@ export class SessionsService {
       });
     }
 
+    const ownedItemIds = this.getOwnedItemIds(session);
     this.ensureSessionReady(session);
 
     if (!params.payload.lastActId) {
-      const actContext = await this.ensureCurrentAct(session);
+      const actContext = await this.ensureCurrentAct(session, ownedItemIds);
       return this.buildActResponse(session, actContext);
     }
 
@@ -238,9 +239,13 @@ export class SessionsService {
 
   private async ensureCurrentAct(
     session: SessionWithState,
+    ownedItemIds: number[],
   ): Promise<ActWithEvents> {
     if (!session.currentActId) {
-      const firstAct = await this.findFirstActForSession(session);
+      const firstAct = await this.findFirstUnlockedActForSession(
+        session,
+        ownedItemIds,
+      );
       await this.prisma.gameSession.update({
         where: { id: session.id },
         data: {
@@ -252,34 +257,63 @@ export class SessionsService {
       return this.loadActWithEvents(Number(firstAct.id));
     }
 
-    return this.loadActWithEvents(Number(session.currentActId));
-  }
+    const act = await this.loadActWithEvents(Number(session.currentActId));
 
-  private async findFirstActForSession(session: SessionWithState): Promise<{
-    id: bigint;
-    dayId: bigint;
-  }> {
-    const firstDay = await this.prisma.day.findFirst({
-      where: { characterGroupId: session.characterGroupId },
-      orderBy: { dayNumber: 'asc' },
-      include: {
-        act: {
-          orderBy: { sequenceNumber: 'asc' },
-          take: 1,
-        },
+    if (this.isActUnlocked(act, ownedItemIds)) {
+      return act;
+    }
+
+    const continuation = await this.findNextActContext(
+      Number(act.id),
+      null,
+      ownedItemIds,
+    );
+
+    if (!continuation) {
+      throw this.createBadRequest(
+        'NEXT_ACT_NOT_AVAILABLE',
+        '진행 가능한 Act가 없습니다.',
+      );
+    }
+
+    await this.prisma.gameSession.update({
+      where: { id: session.id },
+      data: {
+        currentActId: continuation.id,
+        currentDayId: continuation.dayId,
+        status: gameSession_status.IN_PROGRESS,
       },
     });
 
-    if (!firstDay || firstDay.act.length === 0) {
+    return continuation;
+  }
+
+  private async findFirstUnlockedActForSession(
+    session: SessionWithState,
+    ownedItemIds: number[],
+  ): Promise<{
+    id: bigint;
+    dayId: bigint;
+  }> {
+    const firstAct = await this.prisma.act.findFirst({
+      where: {
+        day: { characterGroupId: session.characterGroupId },
+        AND: [this.buildUnlockedActCondition(ownedItemIds)],
+      },
+      orderBy: [{ day: { dayNumber: 'asc' } }, { sequenceNumber: 'asc' }],
+      select: {
+        id: true,
+        dayId: true,
+      },
+    });
+
+    if (!firstAct) {
       throw new NotFoundException(
         '해당 캐릭터 그룹에 사용할 수 있는 Act가 없습니다.',
       );
     }
 
-    return {
-      id: firstDay.act[0].id,
-      dayId: firstDay.id,
-    };
+    return firstAct;
   }
 
   private async loadActWithEvents(actId: number): Promise<ActWithEvents> {
@@ -417,6 +451,7 @@ export class SessionsService {
     }
 
     session = await this.applyClientUpdates(session, payload.updates);
+    const ownedItemIds = this.getOwnedItemIds(session);
 
     if (this.hasSuddenDeath(session)) {
       return this.handleSuddenDeath(session);
@@ -433,6 +468,7 @@ export class SessionsService {
       const continuation = await this.findNextActContext(
         payload.lastActId,
         chosenOption,
+        ownedItemIds,
       );
 
       if (!continuation) {
@@ -454,6 +490,7 @@ export class SessionsService {
       const nextDayContext = await this.prepareNextDayContext(
         session,
         currentAct,
+        ownedItemIds,
       );
 
       if (!nextDayContext) {
@@ -511,9 +548,22 @@ export class SessionsService {
   private async findNextActContext(
     currentActId: number,
     choiceOption: (choiceOption & { choiceEvent: { actId: bigint } }) | null,
+    ownedItemIds: number[],
   ): Promise<ActWithEvents | null> {
+    const unlockedCondition = this.buildUnlockedActCondition(ownedItemIds);
+
     if (choiceOption?.nextActId) {
-      return this.loadActWithEvents(Number(choiceOption.nextActId));
+      const unlockedNextAct = await this.prisma.act.findFirst({
+        where: {
+          id: BigInt(choiceOption.nextActId),
+          AND: [unlockedCondition],
+        },
+        include: ACT_WITH_EVENTS.include,
+      });
+
+      if (unlockedNextAct) {
+        return unlockedNextAct;
+      }
     }
 
     const current = await this.prisma.act.findUnique({
@@ -529,6 +579,7 @@ export class SessionsService {
       where: {
         dayId: current.dayId,
         sequenceNumber: { gt: current.sequenceNumber },
+        AND: [unlockedCondition],
       },
       orderBy: { sequenceNumber: 'asc' },
       include: ACT_WITH_EVENTS.include,
@@ -544,7 +595,9 @@ export class SessionsService {
   private async prepareNextDayContext(
     session: SessionWithState,
     currentAct: ActWithDay,
+    ownedItemIds: number[],
   ): Promise<{ nextDayId: bigint; nextActId: bigint } | null> {
+    const unlockedCondition = this.buildUnlockedActCondition(ownedItemIds);
     const nextDay = await this.prisma.day.findFirst({
       where: {
         characterGroupId: session.characterGroupId,
@@ -553,6 +606,7 @@ export class SessionsService {
       orderBy: { dayNumber: 'asc' },
       include: {
         act: {
+          where: unlockedCondition,
           orderBy: { sequenceNumber: 'asc' },
           take: 1,
         },
@@ -921,6 +975,42 @@ export class SessionsService {
       name: record.item.name ?? null,
       image: record.item.image ?? null,
     }));
+  }
+
+  private getOwnedItemIds(session: SessionWithState): number[] {
+    const ids = new Set<number>();
+    (session.gameSessionInventory ?? []).forEach((record) => {
+      if (record.quantity > 0) {
+        ids.add(Number(record.itemId));
+      }
+    });
+    return Array.from(ids);
+  }
+
+  private buildUnlockedActCondition(
+    ownedItemIds: number[],
+  ): Prisma.actWhereInput {
+    if (ownedItemIds.length === 0) {
+      return { triggerItemId: null };
+    }
+
+    return {
+      OR: [
+        { triggerItemId: null },
+        { triggerItemId: { in: ownedItemIds.map((id) => BigInt(id)) } },
+      ],
+    };
+  }
+
+  private isActUnlocked(
+    act: Pick<ActWithEvents, 'triggerItemId'>,
+    ownedItemIds: number[],
+  ): boolean {
+    if (act.triggerItemId === null) {
+      return true;
+    }
+
+    return ownedItemIds.includes(Number(act.triggerItemId));
   }
 
   private createBadRequest(code: string, message: string): BadRequestException {
