@@ -14,7 +14,7 @@ import { Type } from 'class-transformer';
 import { SessionChoiceOptionDto } from './session-choice-option.dto';
 import { SessionChoiceFallbackDto } from './session-choice-fallback.dto';
 import { SessionChoiceType } from './session-choice-type.enum';
-import { SessionChoiceOutcomeDto } from './session-event.dto';
+import { SessionChoiceOutcomeDto } from './session-choice-outcome.dto';
 
 /**
  * SessionChoiceDto bundles metadata and selectable options for the frontend.

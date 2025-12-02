@@ -11,31 +11,10 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SessionEventCharacterDto } from './session-event-character.dto';
-import type { SessionChoiceDto } from './session-choice.dto';
+import { SessionChoiceDto } from './session-choice.dto';
 import { SessionEventEffectDto } from './session-event-effect.dto';
 import { SessionEventItemChangeDto } from './session-event-item-change.dto';
 import { SessionEventSessionEffectDto } from './session-event-session-effect.dto';
-import { SessionChoiceResultType } from './session-choice-result-type.enum';
-
-export class SessionChoiceOutcomeDto {
-  @ApiProperty({
-    enum: SessionChoiceResultType,
-    example: SessionChoiceResultType.ACT_END,
-  })
-  @IsEnum(SessionChoiceResultType)
-  resultType: SessionChoiceResultType;
-
-  @ApiProperty({ type: () => SessionEventDto, isArray: true })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => SessionEventDto)
-  events: SessionEventDto[];
-}
-
-function resolveSessionChoiceDto(): new () => SessionChoiceDto {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return require('./session-choice.dto').SessionChoiceDto;
-}
 
 /**
  * SessionEventDto captures a single UI event rendered on the client.
@@ -105,11 +84,11 @@ export class SessionEventDto {
   seLoop: boolean | null;
 
   @ApiPropertyOptional({
-    type: resolveSessionChoiceDto,
+    type: () => SessionChoiceDto,
     description: '선택지 정보',
   })
   @ValidateNested()
-  @Type(resolveSessionChoiceDto)
+  @Type(() => SessionChoiceDto)
   @IsOptional()
   choice: SessionChoiceDto | null;
 
