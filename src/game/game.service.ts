@@ -14,6 +14,7 @@ export class GameService {
   async findGameSession(userId: number) {
     const session = await this.prisma.gameSession.findFirst({
       where: { userId, status: 'IN_PROGRESS' },
+      orderBy: { id: 'desc' },
       include: {
         bag: true,
         playingCharacterSet: {
@@ -113,6 +114,7 @@ export class GameService {
     await this.prisma.$transaction(async (tx) => {
       const existingSession = await tx.gameSession.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
+        orderBy: { id: 'desc' },
       });
 
       if (existingSession) {
@@ -151,6 +153,7 @@ export class GameService {
   async selectCharacterSet(userId: number, dto: SelectCharacterSetDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
       where: { userId, status: 'IN_PROGRESS' },
+      orderBy: { id: 'desc' },
       select: { id: true },
     });
 
@@ -283,6 +286,7 @@ export class GameService {
   async submitGameSessionInventory(userId: number, dto: SubmitGameSessionInventoryDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
       where: { userId, status: 'IN_PROGRESS' },
+      orderBy: { id: 'desc' },
       select: { id: true },
     });
 
