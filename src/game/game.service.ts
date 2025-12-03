@@ -121,7 +121,10 @@ export class GameService {
       code: g.code,
       name: g.name,
       groupSelectImage: g.groupSelectImage,
-      deathEndActId: g.deathEndActId ? Number(g.deathEndActId) : null,
+      deathEndingIndex:
+        g.deathEndingIndex === null || g.deathEndingIndex === undefined
+          ? null
+          : g.deathEndingIndex,
       prologActId: g.prologActId ? Number(g.prologActId) : null,
       description: g.description,
     }));

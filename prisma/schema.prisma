@@ -110,7 +110,7 @@ model characterGroup {
   name                 String                 @db.VarChar(255)
   description          String?                @db.Text
   groupSelectImage     String?                @db.VarChar(255)
-  deathEndActId        BigInt?
+  deathEndingIndex     Int?
   prologActId          BigInt?
   day                  day[]
   characterGroupMember characterGroupMember[]

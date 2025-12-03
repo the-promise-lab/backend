@@ -109,6 +109,19 @@ const INTRO_SEQUENCE_WITH_EVENTS = {
 //   typeof INTRO_SEQUENCE_WITH_EVENTS
 // >;
 
+const ENDING_WITH_EVENTS = {
+  include: {
+    endingEvent: {
+      orderBy: { eventOrder: 'asc' },
+      include: {
+        event: EVENT_WITH_RELATIONS,
+      },
+    },
+  },
+} satisfies Prisma.endingDefaultArgs;
+
+type EndingWithEvents = Prisma.endingGetPayload<typeof ENDING_WITH_EVENTS>;
+
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
     item: {
@@ -118,6 +131,12 @@ type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
     };
   };
 }>;
+
+interface DeathEndingResolution {
+  readonly events: SessionEventDto[];
+  readonly meta: SessionEndingMetaDto;
+  readonly endingId: bigint;
+}
 
 /**
  * SessionsService orchestrates long-running story progression flows.
@@ -658,17 +677,14 @@ export class SessionsService {
   private async handleSuddenDeath(
     session: SessionWithState,
   ): Promise<NextActResponseDto> {
-    const deathActId = session.characterGroup?.deathEndActId;
-    let events: SessionEventDto[] = [];
-
-    if (deathActId) {
-      const deathAct = await this.loadActWithEvents(Number(deathActId));
-      const serialized = await this.eventAssembler.buildActEvents({
-        actEventRecords: deathAct.actEvent,
-        inventoryItems: [],
-      });
-      events = serialized.events;
-    }
+    const inventoryItems = this.mapInventorySummaries(
+      session.gameSessionInventory ?? [],
+    );
+    const deathEnding = await this.loadDeathEndingResolution(
+      session,
+      inventoryItems,
+    );
+    const events = deathEnding?.events ?? [];
 
     await this.prisma.gameSession.update({
       where: { id: session.id },
@@ -676,6 +692,7 @@ export class SessionsService {
         status: gameSession_status.SUDDEN_DEATH,
         currentActId: null,
         currentDayId: null,
+        endingId: deathEnding ? deathEnding.endingId : null,
         endedAt: new Date(),
       },
     });
@@ -686,7 +703,61 @@ export class SessionsService {
       day: null,
       act: null,
       events,
-      ending: null,
+      ending: deathEnding?.meta ?? null,
+    };
+  }
+
+  private async loadDeathEndingResolution(
+    session: SessionWithState,
+    inventoryItems: InventoryItemSummary[],
+  ): Promise<DeathEndingResolution | null> {
+    if (!session.characterGroupId) {
+      return null;
+    }
+
+    const deathEndingIndex = session.characterGroup?.deathEndingIndex;
+    if (deathEndingIndex === null || deathEndingIndex === undefined) {
+      return null;
+    }
+
+    const ending = await this.prisma.ending.findFirst({
+      where: {
+        characterGroupId: session.characterGroupId,
+        priority: deathEndingIndex,
+      },
+      include: ENDING_WITH_EVENTS.include,
+    });
+
+    if (!ending) {
+      return null;
+    }
+
+    return {
+      events: this.mapEndingEvents(ending, inventoryItems),
+      meta: this.buildEndingMeta(ending),
+      endingId: ending.id,
+    };
+  }
+
+  private mapEndingEvents(
+    ending: EndingWithEvents,
+    inventoryItems: InventoryItemSummary[],
+  ): SessionEventDto[] {
+    return ending.endingEvent.map((endingEvent) => {
+      const { dto } = this.eventAssembler.mapEvent(
+        endingEvent.event,
+        inventoryItems,
+      );
+      return dto;
+    });
+  }
+
+  private buildEndingMeta(ending: EndingWithEvents): SessionEndingMetaDto {
+    return {
+      endingId: Number(ending.id),
+      endingIndex: ending.priority,
+      title: ending.title,
+      endingImage: ending.image ?? null,
     };
   }
 
