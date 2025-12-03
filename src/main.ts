@@ -93,15 +93,11 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS
+  const allowedOrigins = (
+      process.env.FRONTEND_URLS || ''
+    ).split(',');
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://43.200.235.94.nip.io',
-      'https://43.200.235.94.nip.io',
-      'https://bag-to-the-dev.vercel.app',
-      'https://bag-to-the-future.vercel.app',
-    ],
+    origin: allowedOrigins,
     credentials: true,
   });
 
