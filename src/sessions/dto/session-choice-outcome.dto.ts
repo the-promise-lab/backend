@@ -20,7 +20,13 @@ export class SessionChoiceOutcomeDto {
   @IsEnum(SessionChoiceResultType)
   resultType: SessionChoiceResultType;
 
-  @ApiProperty({ type: resolveSessionEventDto, isArray: true })
+  @ApiProperty({
+    description: '후속 이벤트 목록',
+    type: 'array',
+    items: {
+      $ref: '#/components/schemas/SessionEventDto',
+    },
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(resolveSessionEventDto)

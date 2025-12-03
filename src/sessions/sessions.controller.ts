@@ -6,6 +6,7 @@ import { NextActResponseDto } from './dto/next-act-response.dto';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiExtraModels,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -13,11 +14,13 @@ import {
 import { Request } from 'express';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
+import { SessionChoiceOutcomeDto } from './dto/session-choice-outcome.dto';
 
 /**
  * SessionsController handles the story flow endpoints that begin after bag confirmation.
  */
 @ApiTags('sessions')
+@ApiExtraModels(SessionChoiceOutcomeDto)
 @Controller('sessions')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
