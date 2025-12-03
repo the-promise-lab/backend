@@ -185,6 +185,7 @@ enum gameSession_status {
   GAME_END
   GAME_OVER
   SUDDEN_DEATH
+  GIVE_UP
 }
 
 model playingCharacterSet {

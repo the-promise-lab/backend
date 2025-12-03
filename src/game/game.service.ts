@@ -13,7 +13,7 @@ export class GameService {
 
   async findGameSession(userId: number) {
     const session = await this.prisma.gameSession.findFirst({
-      where: { userId },
+      where: { userId, status: 'IN_PROGRESS' },
       include: {
         bag: true,
         playingCharacterSet: {
@@ -112,32 +112,14 @@ export class GameService {
   async createGameSession(userId: number) {
     await this.prisma.$transaction(async (tx) => {
       const existingSession = await tx.gameSession.findFirst({
-        where: { userId },
-        include: {
-          playingCharacterSet: true,
-          gameSessionInventory: true,
-        },
+        where: { userId, status: 'IN_PROGRESS' },
       });
 
       if (existingSession) {
-        if (existingSession.gameSessionInventory) {
-          await tx.gameSessionInventory.deleteMany({
-            where: { sessionId: existingSession.id },
-          });
-        }
-
-        if (existingSession.playingCharacterSet) {
-          await tx.playingCharacter.deleteMany({
-            where: {
-              playingCharacterSetId: existingSession.playingCharacterSet.id,
-            },
-          });
-          await tx.playingCharacterSet.delete({
-            where: { id: existingSession.playingCharacterSet.id },
-          });
-        }
-
-        await tx.gameSession.delete({ where: { id: existingSession.id } });
+        await tx.gameSession.update({
+          where: { id: existingSession.id },
+          data: { status: 'GIVE_UP', endedAt: new Date() },
+        });
       }
 
       const firstBag = await tx.bag.findFirst();
@@ -168,7 +150,7 @@ export class GameService {
 
   async selectCharacterSet(userId: number, dto: SelectCharacterSetDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
+      where: { userId, status: 'IN_PROGRESS' },
       select: { id: true },
     });
 
@@ -300,7 +282,7 @@ export class GameService {
 
   async submitGameSessionInventory(userId: number, dto: SubmitGameSessionInventoryDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
+      where: { userId, status: 'IN_PROGRESS' },
       select: { id: true },
     });
 
