@@ -683,7 +683,7 @@ export class SessionsService {
   ): Promise<NextActResponseDto> {
     if (flowStatus === SessionFlowStatus.GAME_END) {
       const endingResolution = await this.resolveEndingOutcome(session);
-      const events =
+      const terminalEvents =
         endingResolution?.events ??
         (choiceOption?.nextEventId
           ? await this.eventAssembler.buildEventChain(
@@ -707,7 +707,7 @@ export class SessionsService {
         status: SessionFlowStatus.GAME_END,
         day: null,
         act: null,
-        events,
+        events: terminalEvents,
         ending: endingResolution?.meta ?? null,
       };
     }
@@ -847,12 +847,12 @@ export class SessionsService {
     }
 
     const evaluationContext = this.buildEndingEvaluationContext(session);
+    const inventoryItems = this.mapInventorySummaries(
+      session.gameSessionInventory ?? [],
+    );
 
     for (const ending of endings) {
       if (this.isEndingSatisfied(ending.endingCondition, evaluationContext)) {
-        const inventoryItems = this.mapInventorySummaries(
-          session.gameSessionInventory ?? [],
-        );
         return {
           events: this.mapEndingEvents(ending, inventoryItems),
           meta: this.buildEndingMeta(ending),
@@ -924,14 +924,16 @@ export class SessionsService {
     if (!condition.targetId || !condition.statType) {
       return false;
     }
+
     const stats = characterStats.get(condition.targetId);
     if (!stats) {
       return false;
     }
-    const targetValue =
+
+    const actualValue =
       condition.statType === 'HP' ? stats.currentHp : stats.currentMental;
     return this.compareValues(
-      targetValue,
+      actualValue,
       condition.value,
       condition.comparison,
     );
@@ -944,6 +946,7 @@ export class SessionsService {
     if (!condition.targetId) {
       return false;
     }
+
     const quantity = itemQuantities.get(condition.targetId) ?? 0;
     return this.compareValues(quantity, condition.value, condition.comparison);
   }
@@ -955,27 +958,27 @@ export class SessionsService {
     if (condition.statType !== 'LIFE_POINT') {
       return false;
     }
+
     return this.compareValues(lifePoint, condition.value, condition.comparison);
   }
 
   private compareValues(
     actual: number,
     required: number,
-    comparison: string,
+    comparison?: string,
   ): boolean {
     switch (comparison) {
-      case '>=':
-        return actual >= required;
       case '>':
         return actual > required;
-      case '<=':
-        return actual <= required;
       case '<':
         return actual < required;
+      case '<=':
+        return actual <= required;
       case '==':
         return actual === required;
+      case '>=':
       default:
-        return false;
+        return actual >= required;
     }
   }
 
