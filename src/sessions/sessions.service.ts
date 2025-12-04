@@ -7,6 +7,8 @@ import {
   Prisma,
   choiceOption,
   choiceOption_resultType,
+  endingCondition,
+  endingCondition_conditionType,
   gameSession_status,
   sessionStatHistory_statType,
 } from '@prisma/client';
@@ -120,7 +122,22 @@ const ENDING_WITH_EVENTS = {
   },
 } satisfies Prisma.endingDefaultArgs;
 
+const ENDING_WITH_CONDITIONS = {
+  include: {
+    endingEvent: {
+      orderBy: { eventOrder: 'asc' },
+      include: {
+        event: EVENT_WITH_RELATIONS,
+      },
+    },
+    endingCondition: true,
+  },
+} satisfies Prisma.endingDefaultArgs;
+
 type EndingWithEvents = Prisma.endingGetPayload<typeof ENDING_WITH_EVENTS>;
+type EndingWithFullRelations = Prisma.endingGetPayload<
+  typeof ENDING_WITH_CONDITIONS
+>;
 
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
@@ -136,6 +153,23 @@ interface DeathEndingResolution {
   readonly events: SessionEventDto[];
   readonly meta: SessionEndingMetaDto;
   readonly endingId: bigint;
+}
+
+interface EndingResolution {
+  readonly events: SessionEventDto[];
+  readonly meta: SessionEndingMetaDto;
+  readonly endingId: bigint;
+}
+
+interface EndingEvaluationContext {
+  readonly characterStats: Map<bigint, CharacterStatSnapshot>;
+  readonly itemQuantities: Map<bigint, number>;
+  readonly lifePoint: number;
+}
+
+interface CharacterStatSnapshot {
+  readonly currentHp: number;
+  readonly currentMental: number;
 }
 
 /**
@@ -647,6 +681,37 @@ export class SessionsService {
     flowStatus: SessionFlowStatus,
     choiceOption: (choiceOption & { choiceEvent: { actId: bigint } }) | null,
   ): Promise<NextActResponseDto> {
+    if (flowStatus === SessionFlowStatus.GAME_END) {
+      const endingResolution = await this.resolveEndingOutcome(session);
+      const events =
+        endingResolution?.events ??
+        (choiceOption?.nextEventId
+          ? await this.eventAssembler.buildEventChain(
+              Number(choiceOption.nextEventId),
+            )
+          : []);
+
+      await this.prisma.gameSession.update({
+        where: { id: session.id },
+        data: {
+          status: gameSession_status.GAME_END,
+          currentActId: null,
+          currentDayId: null,
+          endingId: endingResolution ? endingResolution.endingId : null,
+          endedAt: new Date(),
+        },
+      });
+
+      return {
+        sessionId: session.id.toString(),
+        status: SessionFlowStatus.GAME_END,
+        day: null,
+        act: null,
+        events,
+        ending: endingResolution?.meta ?? null,
+      };
+    }
+
     const terminalEvents =
       choiceOption?.nextEventId && flowStatus !== SessionFlowStatus.DAY_END
         ? await this.eventAssembler.buildEventChain(
@@ -740,7 +805,7 @@ export class SessionsService {
   }
 
   private mapEndingEvents(
-    ending: EndingWithEvents,
+    ending: { endingEvent: EndingWithEvents['endingEvent'] },
     inventoryItems: InventoryItemSummary[],
   ): SessionEventDto[] {
     return ending.endingEvent.map((endingEvent) => {
@@ -752,13 +817,166 @@ export class SessionsService {
     });
   }
 
-  private buildEndingMeta(ending: EndingWithEvents): SessionEndingMetaDto {
+  private buildEndingMeta(
+    ending: Pick<EndingWithEvents, 'id' | 'priority' | 'title' | 'image'>,
+  ): SessionEndingMetaDto {
     return {
       endingId: Number(ending.id),
       endingIndex: ending.priority,
       title: ending.title,
       endingImage: ending.image ?? null,
     };
+  }
+
+  private async resolveEndingOutcome(
+    session: SessionWithState,
+  ): Promise<EndingResolution | null> {
+    if (!session.characterGroupId) {
+      return null;
+    }
+
+    const endings: EndingWithFullRelations[] =
+      await this.prisma.ending.findMany({
+        where: { characterGroupId: session.characterGroupId },
+        include: ENDING_WITH_CONDITIONS.include,
+        orderBy: { priority: 'asc' },
+      });
+
+    if (endings.length === 0) {
+      return null;
+    }
+
+    const evaluationContext = this.buildEndingEvaluationContext(session);
+
+    for (const ending of endings) {
+      if (this.isEndingSatisfied(ending.endingCondition, evaluationContext)) {
+        const inventoryItems = this.mapInventorySummaries(
+          session.gameSessionInventory ?? [],
+        );
+        return {
+          events: this.mapEndingEvents(ending, inventoryItems),
+          meta: this.buildEndingMeta(ending),
+          endingId: ending.id,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private buildEndingEvaluationContext(
+    session: SessionWithState,
+  ): EndingEvaluationContext {
+    const characterStats = new Map<bigint, CharacterStatSnapshot>();
+    session.playingCharacterSet?.playingCharacter?.forEach((pc) => {
+      characterStats.set(pc.characterId, {
+        currentHp: pc.currentHp ?? 0,
+        currentMental: pc.currentMental ?? 0,
+      });
+    });
+
+    const itemQuantities = new Map<bigint, number>();
+    (session.gameSessionInventory ?? []).forEach((record) => {
+      itemQuantities.set(record.itemId, record.quantity);
+    });
+
+    return {
+      characterStats,
+      itemQuantities,
+      lifePoint: session.lifePoint ?? 0,
+    };
+  }
+
+  private isEndingSatisfied(
+    conditions: endingCondition[],
+    context: EndingEvaluationContext,
+  ): boolean {
+    for (const condition of conditions) {
+      switch (condition.conditionType) {
+        case endingCondition_conditionType.CHARACTER_STAT:
+          if (
+            !this.satisfiesCharacterCondition(condition, context.characterStats)
+          ) {
+            return false;
+          }
+          break;
+        case endingCondition_conditionType.ITEM:
+          if (!this.satisfiesItemCondition(condition, context.itemQuantities)) {
+            return false;
+          }
+          break;
+        case endingCondition_conditionType.SESSION_STAT:
+          if (!this.satisfiesSessionCondition(condition, context.lifePoint)) {
+            return false;
+          }
+          break;
+        default:
+          return false;
+      }
+    }
+    return true;
+  }
+
+  private satisfiesCharacterCondition(
+    condition: endingCondition,
+    characterStats: Map<bigint, CharacterStatSnapshot>,
+  ): boolean {
+    if (!condition.targetId || !condition.statType) {
+      return false;
+    }
+    const stats = characterStats.get(condition.targetId);
+    if (!stats) {
+      return false;
+    }
+    const targetValue =
+      condition.statType === 'HP' ? stats.currentHp : stats.currentMental;
+    return this.compareValues(
+      targetValue,
+      condition.value,
+      condition.comparison,
+    );
+  }
+
+  private satisfiesItemCondition(
+    condition: endingCondition,
+    itemQuantities: Map<bigint, number>,
+  ): boolean {
+    if (!condition.targetId) {
+      return false;
+    }
+    const quantity = itemQuantities.get(condition.targetId) ?? 0;
+    return this.compareValues(quantity, condition.value, condition.comparison);
+  }
+
+  private satisfiesSessionCondition(
+    condition: endingCondition,
+    lifePoint: number,
+  ): boolean {
+    if (condition.statType !== 'LIFE_POINT') {
+      return false;
+    }
+    return this.compareValues(lifePoint, condition.value, condition.comparison);
+  }
+
+  private compareValues(
+    actual: number,
+    required: number,
+    comparison: string,
+  ): boolean {
+    switch (comparison) {
+      case '>=':
+        return actual >= required;
+      case '>':
+        return actual > required;
+      case '<=':
+        return actual <= required;
+      case '<':
+        return actual < required;
+      case '==':
+        return actual === required;
+      default:
+        return false;
+    }
   }
 
   private async applyClientUpdates(
