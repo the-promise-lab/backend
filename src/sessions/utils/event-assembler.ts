@@ -107,6 +107,7 @@ export interface BuildActEventsResult {
 
 export interface BuildIntroEventsParams {
   readonly events: EventWithRelations[];
+  readonly characterImages: CharacterImageLookup;
 }
 
 export interface BuildChoiceOptionEventChainsParams {
@@ -192,7 +193,9 @@ export class EventAssembler {
   async buildIntroEvents(
     params: BuildIntroEventsParams,
   ): Promise<SessionEventDto[]> {
-    return params.events.map((event) => this.mapEvent(event, [], {}).dto);
+    return params.events.map(
+      (event) => this.mapEvent(event, [], params.characterImages).dto,
+    );
   }
 
   async buildEventChain(
