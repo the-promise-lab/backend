@@ -49,8 +49,8 @@ export class SessionsController {
     });
   }
 
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth('JWT-auth')
+  //@UseGuards(AuthGuard('jwt'))
+  //@ApiBearerAuth('JWT-auth')
   @Post('active/next')
   @ApiOperation({
     summary: 'Act 진행',
@@ -68,7 +68,8 @@ export class SessionsController {
     @Body() nextActRequestDto: NextActRequestDto,
   ): Promise<NextActResponseDto> {
     return this.sessionsService.executeNextAct({
-      userId: Number((req.user as { id: string }).id),
+      //userId: Number((req.user as { id: string }).id),
+      userId: 3,
       payload: nextActRequestDto,
     });
   }

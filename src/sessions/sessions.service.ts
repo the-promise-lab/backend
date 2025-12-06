@@ -188,11 +188,21 @@ export class SessionsService {
     private readonly sessionStateMachine: SessionStateMachine,
   ) {}
 
-  async playIntro(params: PlayIntroParams): Promise<IntroResponseDto> {
-    const session = await this.prisma.gameSession.findFirst({
-      where: { userId: params.userId },
+  private findLatestInProgressSession(
+    userId: number,
+  ): Promise<SessionWithState | null> {
+    return this.prisma.gameSession.findFirst({
+      where: {
+        userId,
+        status: gameSession_status.IN_PROGRESS,
+      },
+      orderBy: { createdAt: 'desc' },
       include: SESSION_STATE_INCLUDE,
     });
+  }
+
+  async playIntro(params: PlayIntroParams): Promise<IntroResponseDto> {
+    const session = await this.findLatestInProgressSession(params.userId);
 
     if (!session) {
       throw new NotFoundException({
@@ -236,10 +246,7 @@ export class SessionsService {
   async executeNextAct(
     params: ExecuteNextActParams,
   ): Promise<NextActResponseDto> {
-    const session = await this.prisma.gameSession.findFirst({
-      where: { userId: params.userId },
-      include: SESSION_STATE_INCLUDE,
-    });
+    const session = await this.findLatestInProgressSession(params.userId);
 
     if (!session) {
       throw new NotFoundException({
