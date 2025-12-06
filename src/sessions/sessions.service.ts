@@ -42,6 +42,9 @@ import {
 } from './utils/event-assembler';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
+import { SessionReportTab } from './dto/session-report-tab.enum';
+import { SessionReportResponseDto } from './dto/session-report-response.dto';
+import { ReportAssembler } from './utils/report-assembler';
 
 export interface ExecuteNextActParams {
   readonly userId: number;
@@ -142,6 +145,34 @@ type EndingWithFullRelations = Prisma.endingGetPayload<
   typeof ENDING_WITH_CONDITIONS
 >;
 
+const REPORT_SESSION_INCLUDE = {
+  user: true,
+  characterGroup: true,
+  bag: true,
+  ending: true,
+  playingCharacterSet: {
+    include: {
+      playingCharacter: {
+        include: {
+          character: true,
+        },
+      },
+    },
+  },
+  gameSessionInventory: {
+    include: {
+      item: true,
+    },
+  },
+  gameSessionHistory: true,
+  sessionStatHistory: true,
+  currentDay: true,
+} satisfies Prisma.gameSessionDefaultArgs['include'];
+
+type SessionWithReport = Prisma.gameSessionGetPayload<{
+  include: typeof REPORT_SESSION_INCLUDE;
+}>;
+
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
     item: {
@@ -186,6 +217,7 @@ export class SessionsService {
     private readonly eventAssembler: EventAssembler,
     private readonly choiceResultMapper: ChoiceResultMapper,
     private readonly sessionStateMachine: SessionStateMachine,
+    private readonly reportAssembler: ReportAssembler,
   ) {}
 
   private findLatestInProgressSession(
@@ -264,6 +296,67 @@ export class SessionsService {
     }
 
     return this.handleActCompletion(session, params.payload);
+  }
+
+  /**
+   * Returns the result report for a finished session.
+   */
+  async getSessionReport(params: {
+    readonly userId: number;
+    readonly sessionId: number;
+    readonly tab?: SessionReportTab;
+    readonly includeInventory?: boolean;
+  }): Promise<SessionReportResponseDto> {
+    const tab = params.tab ?? SessionReportTab.RESULT;
+    const includeInventory = params.includeInventory ?? true;
+    const session = await this.prisma.gameSession.findFirst({
+      where: { id: BigInt(params.sessionId), userId: BigInt(params.userId) },
+      include: REPORT_SESSION_INCLUDE,
+    });
+
+    if (!session) {
+      throw new NotFoundException({
+        code: 'SESSION_NOT_FOUND',
+        message: '게임 세션을 찾을 수 없습니다.',
+      });
+    }
+
+    if (
+      session.status === gameSession_status.IN_PROGRESS ||
+      session.status === gameSession_status.GAME_OVER
+    ) {
+      throw this.createBadRequest(
+        'REPORT_NOT_AVAILABLE',
+        '게임 종료 후 조회할 수 있습니다.',
+      );
+    }
+
+    if (tab !== SessionReportTab.RESULT) {
+      throw this.createBadRequest(
+        'TAB_ACCESS_DENIED',
+        '현재는 결과 탭만 지원합니다.',
+      );
+    }
+
+    const ending =
+      session.ending ??
+      (session.status === gameSession_status.SUDDEN_DEATH
+        ? await this.prisma.ending.findFirst({
+            where: {
+              characterGroupId: session.characterGroupId ?? undefined,
+              priority: 8,
+            },
+          })
+        : null);
+    if (ending) {
+      (session as SessionWithReport).ending = ending;
+    }
+
+    return this.reportAssembler.buildResultReport({
+      session,
+      tab,
+      includeInventory,
+    });
   }
 
   async createOrResetSessionForUser(userId: number): Promise<void> {
@@ -729,7 +822,7 @@ export class SessionsService {
         data: {
           status: gameSession_status.GAME_END,
           currentActId: null,
-          currentDayId: null,
+          currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
           endingId: endingResolution ? endingResolution.endingId : null,
           endedAt: new Date(),
         },
@@ -757,7 +850,7 @@ export class SessionsService {
       data: {
         status: this.mapFlowStatusToEntityStatus(flowStatus),
         currentActId: null,
-        currentDayId: null,
+        currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
         endedAt: new Date(),
       },
     });
@@ -789,7 +882,7 @@ export class SessionsService {
       data: {
         status: gameSession_status.SUDDEN_DEATH,
         currentActId: null,
-        currentDayId: null,
+        currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
         endingId: deathEnding ? deathEnding.endingId : null,
         endedAt: new Date(),
       },
@@ -1162,6 +1255,12 @@ export class SessionsService {
 
     for (const change of changes) {
       const itemId = BigInt(change.itemId);
+      const item = await tx.item.findUnique({
+        where: { id: itemId },
+        select: { capacityCost: true },
+      });
+      const capacityCost = item?.capacityCost ?? 0;
+
       const existing = await tx.gameSessionInventory.findUnique({
         where: {
           sessionId_itemId: {
@@ -1211,6 +1310,19 @@ export class SessionsService {
             delta: actualDelta,
           },
         });
+      }
+
+      if (change.quantityChange > 0 && capacityCost > 0) {
+        await tx.gameSession.update({
+          where: { id: session.id },
+          data: {
+            bagCapacityUsed:
+              (session.bagCapacityUsed ?? 0) +
+              capacityCost * change.quantityChange,
+          },
+        });
+        session.bagCapacityUsed =
+          (session.bagCapacityUsed ?? 0) + capacityCost * change.quantityChange;
       }
     }
   }

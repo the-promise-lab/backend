@@ -517,6 +517,7 @@ model ending {
   id               BigInt            @id @default(autoincrement())
   characterGroupId BigInt
   priority         Int
+  grade            String            @db.VarChar(50)
   title            String            @db.VarChar(255)
   image            String?           @db.VarChar(255)
   characterGroup   characterGroup    @relation(fields: [characterGroupId], references: [id])
