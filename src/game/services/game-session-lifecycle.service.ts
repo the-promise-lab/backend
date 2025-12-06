@@ -22,12 +22,13 @@ export class GameSessionLifecycleService {
 
       const existingInProgressSession = await tx.gameSession.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
+        orderBy: { id: 'desc' },
       });
 
       if (existingInProgressSession) {
         await tx.gameSession.update({
           where: { id: existingInProgressSession.id },
-          data: { status: 'GIVE_UP' },
+          data: { status: 'GIVE_UP', endedAt: new Date() },
         });
       }
 
@@ -48,6 +49,7 @@ export class GameSessionLifecycleService {
       const gameSession = await tx.gameSession.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
         select: { id: true },
+        orderBy: { id: 'desc' },
       });
 
       if (!gameSession) {
