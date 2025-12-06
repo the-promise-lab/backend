@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: cd-kakao-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -274,7 +274,7 @@ jobs:
         if: success()
         run: |
           echo "✅ 배포가 성공적으로 완료되었습니다!"
-          echo "🏷️ 배포된 태그: ${{ env.IMAGE_TAG:-latest }}"
+          echo "🏷️ 배포된 태그: ${IMAGE_TAG:-latest}"
           echo "🌐 서비스 URL: http://${{ secrets.KAKAO_CLOUD_HOST }} (Nginx 리버스 프록시)"
           echo "🔍 헬스체크: http://${{ secrets.KAKAO_CLOUD_HOST }}/api/health"
 
