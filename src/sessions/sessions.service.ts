@@ -36,7 +36,10 @@ import {
   NextActSessionStatChangeDto,
   NextActItemChangeDto,
 } from './dto/next-act-request.dto';
-import { InventoryItemSummary } from './utils/event-assembler';
+import {
+  CharacterImageLookup,
+  InventoryItemSummary,
+} from './utils/event-assembler';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
 
@@ -389,12 +392,19 @@ export class SessionsService {
     const inventoryItems = this.mapInventorySummaries(
       session.gameSessionInventory ?? [],
     );
+    const characterImages = await this.loadCharacterImages();
     const { events, choiceOptionMap } =
       await this.eventAssembler.buildActEvents({
         actEventRecords: act.actEvent,
         inventoryItems,
+        characterImages,
       });
-    await this.populateChoiceResults(events, choiceOptionMap, inventoryItems);
+    await this.populateChoiceResults(
+      events,
+      choiceOptionMap,
+      inventoryItems,
+      characterImages,
+    );
 
     return {
       sessionId: session.id.toString(),
@@ -404,6 +414,20 @@ export class SessionsService {
       events,
       ending: null,
     };
+  }
+
+  private async loadCharacterImages(): Promise<CharacterImageLookup> {
+    const rows = await this.prisma.characterEmotionImage.findMany({
+      where: { deletedAt: null },
+    });
+    return rows.reduce<CharacterImageLookup>((acc, row) => {
+      const code = row.characterCode;
+      const emotion = row.emotion || 'default';
+      const existing = acc[code] ?? {};
+      existing[emotion] = row.imageUrl;
+      acc[code] = existing;
+      return acc;
+    }, {});
   }
 
   private toDayMeta(day: ActWithEvents['day']): SessionDayMetaDto {
@@ -425,6 +449,7 @@ export class SessionsService {
     events: SessionEventDto[],
     choiceOptionMap: Record<number, ChoiceOptionRecord[]>,
     inventoryItems: InventoryItemSummary[],
+    characterImages: CharacterImageLookup,
   ): Promise<void> {
     await Promise.all(
       events.map(async (event) => {
@@ -435,6 +460,7 @@ export class SessionsService {
         const choiceResults = await this.choiceResultMapper.mapChoiceResults({
           choiceOptions,
           inventoryItems,
+          characterImages,
         });
         event.choice.outcomes = choiceResults;
       }),

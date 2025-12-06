@@ -97,6 +97,7 @@ type ChoiceOptionWithRelations = Prisma.choiceOptionGetPayload<
 export interface BuildActEventsParams {
   readonly actEventRecords: ActEventWithRelations[];
   readonly inventoryItems: InventoryItemSummary[];
+  readonly characterImages: CharacterImageLookup;
 }
 
 export interface BuildActEventsResult {
@@ -111,7 +112,13 @@ export interface BuildIntroEventsParams {
 export interface BuildChoiceOptionEventChainsParams {
   readonly choiceOptionIds: number[];
   readonly inventoryItems: InventoryItemSummary[];
+  readonly characterImages: CharacterImageLookup;
 }
+
+export type CharacterImageLookup = Record<
+  string,
+  Record<string, string | undefined>
+>;
 
 /**
  * EventAssembler converts raw DB rows into transport-friendly event DTOs.
@@ -134,6 +141,7 @@ export class EventAssembler {
       const { dto, choiceOptions } = this.mapEvent(
         record.event,
         params.inventoryItems,
+        params.characterImages,
       );
       events.push(dto);
       if (choiceOptions.length > 0) {
@@ -153,6 +161,7 @@ export class EventAssembler {
   mapEvent(
     event: EventWithRelations,
     inventoryItems: InventoryItemSummary[],
+    characterImages: CharacterImageLookup = {},
   ): {
     dto: SessionEventDto;
     choiceOptions: ChoiceOptionRecord[];
@@ -163,7 +172,7 @@ export class EventAssembler {
       eventId: Number(event.id),
       type: event.eventType,
       script: this.resolveScript(event),
-      characters: this.extractCharacters(event),
+      characters: this.extractCharacters(event, characterImages),
       bgImage: event.bgImage ?? null,
       sceneEffect: event.sceneEffect ?? null,
       bgm: event.bgm ?? null,
@@ -183,11 +192,12 @@ export class EventAssembler {
   async buildIntroEvents(
     params: BuildIntroEventsParams,
   ): Promise<SessionEventDto[]> {
-    return params.events.map((event) => this.mapEvent(event, []).dto);
+    return params.events.map((event) => this.mapEvent(event, [], {}).dto);
   }
 
   async buildEventChain(
     startEventId: number | bigint,
+    characterImages: CharacterImageLookup = {},
   ): Promise<SessionEventDto[]> {
     const chain: SessionEventDto[] = [];
     let cursor: bigint | null = BigInt(startEventId);
@@ -208,7 +218,7 @@ export class EventAssembler {
         break;
       }
 
-      const { dto } = this.mapEvent(event, []);
+      const { dto } = this.mapEvent(event, [], characterImages);
       chain.push(dto);
       cursor = event.nextEventId;
     }
@@ -240,6 +250,7 @@ export class EventAssembler {
       const dto = this.mapEvent(
         entry.event as EventWithRelations,
         params.inventoryItems,
+        params.characterImages,
       ).dto;
       const optionId = Number(entry.choiceOptionId);
       const bucket = grouped.get(optionId);
@@ -268,6 +279,7 @@ export class EventAssembler {
 
   private extractCharacters(
     event: EventWithRelations,
+    characterImages: CharacterImageLookup,
   ): SessionEventCharacterDto[] {
     if (!event.eventDialog?.eventDialogCharacter) {
       return [];
@@ -277,8 +289,29 @@ export class EventAssembler {
       characterCode: dialogCharacter.character?.code ?? '',
       position: dialogCharacter.position ?? null,
       emotion: dialogCharacter.emotion ?? null,
+      imageUrl: this.resolveCharacterImage(
+        dialogCharacter.character?.code,
+        dialogCharacter.emotion,
+        characterImages,
+      ),
       isSpeaker: dialogCharacter.isSpeaker ?? null,
     }));
+  }
+
+  private resolveCharacterImage(
+    characterCode: string | undefined,
+    emotion: string | null | undefined,
+    characterImages: CharacterImageLookup,
+  ): string | null {
+    if (!characterCode) {
+      return null;
+    }
+    const bucket = characterImages[characterCode];
+    if (!bucket) {
+      return null;
+    }
+    const emotionKey = emotion ?? 'default';
+    return bucket[emotionKey] ?? bucket.default ?? null;
   }
 
   private extractCharacterEffects(

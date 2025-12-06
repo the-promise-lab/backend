@@ -358,6 +358,19 @@ model eventDialogCharacter {
   @@map("eventDialogCharacter")
 }
 
+model characterEmotionImage {
+  id            BigInt    @id @default(autoincrement())
+  characterCode String    @db.VarChar(255)
+  emotion       String    @db.VarChar(100)
+  imageUrl      String    @db.VarChar(500)
+  createdAt     DateTime? @default(now()) @db.DateTime()
+  updatedAt     DateTime? @updatedAt @db.DateTime()
+  deletedAt     DateTime? @db.DateTime()
+
+  @@unique([characterCode, emotion], map: "uk_character_emotion_image")
+  @@map("characterEmotionImage")
+}
+
 model eventChoice {
   eventId      BigInt  @id
   choiceTitle  String? @db.VarChar(255)
