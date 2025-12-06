@@ -28,6 +28,16 @@ export class SessionEventCharacterDto {
   emotion: string | null;
 
   @ApiProperty({
+    example:
+      'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/character/hb/angry.png',
+    description: 'Emotion image URL',
+    nullable: true,
+  })
+  @IsString()
+  @IsOptional()
+  imageUrl: string | null;
+
+  @ApiProperty({
     example: true,
     description: 'Speaks in this line',
     nullable: true,

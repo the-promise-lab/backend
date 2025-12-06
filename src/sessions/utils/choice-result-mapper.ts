@@ -5,12 +5,14 @@ import { SessionEventDto } from '../dto/session-event.dto';
 import {
   ChoiceOptionRecord,
   EventAssembler,
+  CharacterImageLookup,
   InventoryItemSummary,
 } from './event-assembler';
 
 export interface MapChoiceResultsParams {
   readonly choiceOptions: ChoiceOptionRecord[];
   readonly inventoryItems: InventoryItemSummary[];
+  readonly characterImages: CharacterImageLookup;
 }
 
 export interface ChoiceResultPayload {
@@ -32,6 +34,7 @@ export class ChoiceResultMapper {
     const chainMap = await this.eventAssembler.buildChoiceOptionEventChains({
       choiceOptionIds: optionIds,
       inventoryItems: params.inventoryItems,
+      characterImages: params.characterImages,
     });
 
     const entries = await Promise.all(
@@ -39,7 +42,10 @@ export class ChoiceResultMapper {
         let events =
           chainMap[option.id] ??
           (option.nextEventId
-            ? await this.eventAssembler.buildEventChain(option.nextEventId)
+            ? await this.eventAssembler.buildEventChain(
+                option.nextEventId,
+                params.characterImages,
+              )
             : []);
 
         return [
