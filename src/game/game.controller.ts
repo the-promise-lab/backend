@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { GameService } from './game.service';
+import { AuthGuard } from '@nestjs/passport'; // 예시: JWT 인증 가드
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
 import { SubmitGameSessionInventoryDto } from './dto/submit-game-session-inventory.dto';
 import { SelectCharacterSetResultDto } from './dto/select-character-set-result.dto';
@@ -13,7 +14,6 @@ import {
 import { CharacterGroupDto } from './dto/character-group.dto';
 import { SetupInfoDto } from './dto/setup-info.dto';
 import { GameSessionDto } from './dto/game-session.dto';
-import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('game')
 @Controller('game')

@@ -42,9 +42,6 @@ import {
 } from './utils/event-assembler';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
-import { SessionReportTab } from './dto/session-report-tab.enum';
-import { SessionReportResponseDto } from './dto/session-report-response.dto';
-import { ReportAssembler } from './utils/report-assembler';
 
 export interface ExecuteNextActParams {
   readonly userId: number;
@@ -145,29 +142,6 @@ type EndingWithFullRelations = Prisma.endingGetPayload<
   typeof ENDING_WITH_CONDITIONS
 >;
 
-const REPORT_SESSION_INCLUDE = {
-  characterGroup: true,
-  bag: true,
-  ending: true,
-  playingCharacterSet: {
-    include: {
-      playingCharacter: {
-        include: {
-          character: true,
-        },
-      },
-    },
-  },
-  gameSessionInventory: {
-    include: {
-      item: true,
-    },
-  },
-  gameSessionHistory: true,
-  sessionStatHistory: true,
-  currentDay: true,
-} satisfies Prisma.gameSessionDefaultArgs['include'];
-
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
     item: {
@@ -212,7 +186,6 @@ export class SessionsService {
     private readonly eventAssembler: EventAssembler,
     private readonly choiceResultMapper: ChoiceResultMapper,
     private readonly sessionStateMachine: SessionStateMachine,
-    private readonly reportAssembler: ReportAssembler,
   ) {}
 
   async playIntro(params: PlayIntroParams): Promise<IntroResponseDto> {
@@ -284,50 +257,6 @@ export class SessionsService {
     }
 
     return this.handleActCompletion(session, params.payload);
-  }
-
-  /**
-   * Returns the result report for a finished session.
-   */
-  async getSessionReport(params: {
-    readonly userId: number;
-    readonly sessionId: number;
-    readonly tab?: SessionReportTab;
-    readonly includeInventory?: boolean;
-  }): Promise<SessionReportResponseDto> {
-    const tab = params.tab ?? SessionReportTab.RESULT;
-    const includeInventory = params.includeInventory ?? true;
-    const session = await this.prisma.gameSession.findFirst({
-      where: { id: BigInt(params.sessionId), userId: BigInt(params.userId) },
-      include: REPORT_SESSION_INCLUDE,
-    });
-
-    if (!session) {
-      throw new NotFoundException({
-        code: 'SESSION_NOT_FOUND',
-        message: '게임 세션을 찾을 수 없습니다.',
-      });
-    }
-
-    if (session.status === gameSession_status.IN_PROGRESS) {
-      throw this.createBadRequest(
-        'REPORT_NOT_AVAILABLE',
-        '게임 종료 후 조회할 수 있습니다.',
-      );
-    }
-
-    if (tab !== SessionReportTab.RESULT) {
-      throw this.createBadRequest(
-        'TAB_ACCESS_DENIED',
-        '현재는 결과 탭만 지원합니다.',
-      );
-    }
-
-    return this.reportAssembler.buildResultReport({
-      session,
-      tab,
-      includeInventory,
-    });
   }
 
   async createOrResetSessionForUser(userId: number): Promise<void> {

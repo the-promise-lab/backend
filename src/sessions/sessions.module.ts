@@ -6,7 +6,6 @@ import { GameModule } from '../game/game.module';
 import { EventAssembler } from './utils/event-assembler';
 import { ChoiceResultMapper } from './utils/choice-result-mapper';
 import { SessionStateMachine } from './utils/session-state-machine';
-import { ReportAssembler } from './utils/report-assembler';
 
 @Module({
   imports: [PrismaModule, GameModule],
@@ -16,7 +15,6 @@ import { ReportAssembler } from './utils/report-assembler';
     EventAssembler,
     ChoiceResultMapper,
     SessionStateMachine,
-    ReportAssembler,
   ],
 })
 export class SessionsModule {}

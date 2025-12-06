@@ -1,14 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Post,
-  Query,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
+import { AuthGuard } from '@nestjs/passport';
 import { NextActRequestDto } from './dto/next-act-request.dto';
 import { NextActResponseDto } from './dto/next-act-response.dto';
 import {
@@ -23,9 +15,6 @@ import { Request } from 'express';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
 import { SessionChoiceOutcomeDto } from './dto/session-choice-outcome.dto';
-import { SessionReportQueryDto } from './dto/session-report-query.dto';
-import { SessionReportResponseDto } from './dto/session-report-response.dto';
-import { AuthGuard } from '@nestjs/passport';
 
 /**
  * SessionsController handles the story flow endpoints that begin after bag confirmation.
@@ -81,31 +70,6 @@ export class SessionsController {
     return this.sessionsService.executeNextAct({
       userId: Number((req.user as { id: string }).id),
       payload: nextActRequestDto,
-    });
-  }
-
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth('JWT-auth')
-  @Get(':sessionId/report')
-  @ApiOperation({
-    summary: '결과 보고서 조회',
-    description: 'C001 결과 리포트 탭 데이터를 반환합니다.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: '결과 보고서',
-    type: SessionReportResponseDto,
-  })
-  getSessionReport(
-    @Req() req: Request,
-    @Param('sessionId') sessionId: string,
-    @Query() query: SessionReportQueryDto,
-  ): Promise<SessionReportResponseDto> {
-    return this.sessionsService.getSessionReport({
-      userId: Number((req.user as { id: string }).id),
-      sessionId: Number(sessionId),
-      tab: query.tab,
-      includeInventory: query.includeInventory,
     });
   }
 }
