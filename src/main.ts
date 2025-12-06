@@ -20,7 +20,9 @@ import { URL } from 'url';
 async function bootstrap() {
   const logger = new Logger('Bootstrap'); // Create a logger instance
 
-  logger.log(`[Env Check] DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/\/.*:.*@/, '//****:****@') : 'Undefined'}`);
+  logger.log(
+    `[Env Check] DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/\/.*:.*@/, '//****:****@') : 'Undefined'}`,
+  );
 
   const app = await NestFactory.create(AppModule);
 
@@ -49,9 +51,9 @@ async function bootstrap() {
       columnNames: {
         session_id: 'session_id',
         expires: 'expires',
-        data: 'data'
-      }
-    }
+        data: 'data',
+      },
+    },
   };
 
   // Log the DB options (excluding password for security)
@@ -65,6 +67,7 @@ async function bootstrap() {
 
   const sessionStore = new (MySQLStore(session as any))(dbOptions);
 
+  const isProduction = process.env.NODE_ENV === 'production';
   // Configure express-session
   app.use(
     session({
@@ -73,11 +76,11 @@ async function bootstrap() {
       resave: false,
       saveUninitialized: false,
       cookie: {
-        domain: '43.200.235.94.nip.io',
+        domain: isProduction ? '43.200.235.94.nip.io' : undefined,
         maxAge: 3600000, // 1 hour
         httpOnly: true,
-        secure: true, // Must be true if SameSite=None
-        sameSite: 'none',
+        secure: isProduction, // Only secure in production
+        sameSite: isProduction ? 'none' : 'lax', // Lax in dev, none in production
       },
     }),
   );
@@ -94,17 +97,11 @@ async function bootstrap() {
   );
 
   // Enable CORS
+  const allowedOrigins = (process.env.FRONTEND_URLS || '').split(',');
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://43.200.235.94.nip.io',
-      'https://43.200.235.94.nip.io',
-      'https://bag-to-the-dev.vercel.app',
-      'https://bag-to-the-future.vercel.app',
-    ],
+    origin: allowedOrigins,
     credentials: true,
   });
-
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -139,7 +136,8 @@ async function bootstrap() {
   await app.listen(port);
 
   logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
-  logger.log(`📚 Swagger API docs available at: http://localhost:${port}/api/docs`);
+  logger.log(
+    `📚 Swagger API docs available at: http://localhost:${port}/api/docs`,
+  );
 }
 bootstrap();
-
