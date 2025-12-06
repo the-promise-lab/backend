@@ -104,7 +104,9 @@ export class AuthService {
   }
 
   async getUserFromJwt(payload: any) {
-    this.logger.debug(`[getUserFromJwt] Getting user for payload: ${JSON.stringify(payload)}`);
+    this.logger.debug(
+      `[getUserFromJwt] Getting user for payload: ${JSON.stringify(payload)}`,
+    );
     const user = await this.prisma.user.findUnique({
       where: { id: BigInt(payload.sub) },
     });
@@ -114,10 +116,14 @@ export class AuthService {
         ...user,
         id: user.id.toString(),
       };
-      this.logger.debug(`[getUserFromJwt] User found: ${JSON.stringify(userForSerialization)}`);
+      this.logger.debug(
+        `[getUserFromJwt] User found: ${JSON.stringify(userForSerialization)}`,
+      );
       return userForSerialization;
     }
-    this.logger.warn(`[getUserFromJwt] User not found for payload: ${JSON.stringify(payload)}`);
+    this.logger.warn(
+      `[getUserFromJwt] User not found for payload: ${JSON.stringify(payload)}`,
+    );
     return null;
   }
 }

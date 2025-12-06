@@ -20,37 +20,20 @@ export class GameSessionLifecycleService {
         throw new NotFoundException('가방을 찾을 수 없습니다.');
       }
 
-      const existingSession = await tx.gameSession.findFirst({
-        where: { userId },
-        include: {
-          playingCharacterSet: true,
-          gameSessionInventory: true,
-        },
+      const existingInProgressSession = await tx.gameSession.findFirst({
+        where: { userId, status: 'IN_PROGRESS' },
+        orderBy: { id: 'desc' },
       });
 
-      if (existingSession) {
-        if (existingSession.gameSessionInventory.length > 0) {
-          await tx.gameSessionInventory.deleteMany({
-            where: { sessionId: existingSession.id },
-          });
-        }
-
-        if (existingSession.playingCharacterSet) {
-          await tx.playingCharacter.deleteMany({
-            where: {
-              playingCharacterSetId: existingSession.playingCharacterSet.id,
-            },
-          });
-          await tx.playingCharacterSet.delete({
-            where: { id: existingSession.playingCharacterSet.id },
-          });
-        }
-
-        await tx.gameSession.delete({ where: { id: existingSession.id } });
+      if (existingInProgressSession) {
+        await tx.gameSession.update({
+          where: { id: existingInProgressSession.id },
+          data: { status: 'GIVE_UP', endedAt: new Date() },
+        });
       }
 
       await tx.gameSession.create({
-        data: { userId, bagId: firstBag.id },
+        data: { userId, bagId: firstBag.id, status: 'IN_PROGRESS' },
       });
     });
   }
@@ -64,8 +47,9 @@ export class GameSessionLifecycleService {
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const gameSession = await tx.gameSession.findFirst({
-        where: { userId },
+        where: { userId, status: 'IN_PROGRESS' },
         select: { id: true },
+        orderBy: { id: 'desc' },
       });
 
       if (!gameSession) {
