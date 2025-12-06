@@ -13,7 +13,7 @@ export class GameService {
 
   async findGameSession(userId: number) {
     const session = await this.prisma.gameSession.findFirst({
-      where: { userId },
+      where: { userId, status: 'IN_PROGRESS' },
       include: {
         bag: true,
         playingCharacterSet: {
@@ -156,7 +156,7 @@ export class GameService {
 
   async selectCharacterSet(userId: number, dto: SelectCharacterSetDto) {
     const gameSession = await this.prisma.gameSession.findFirst({
-      where: { userId },
+      where: { userId, status: 'IN_PROGRESS' },
       select: { id: true },
     });
 
