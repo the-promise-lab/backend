@@ -148,8 +148,21 @@ jobs:
           docker build -t test-image .
           echo "✅ Docker 이미지 빌드 테스트 성공!"
 
-      - name: Create Git tag (main branch only)
+      - name: Check if tag already exists (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: check_tag
+        run: |
+          TARGET_TAG="v${{ steps.new_version.outputs.new_version }}"
+          if git ls-remote --tags origin "$TARGET_TAG" | grep -q "refs/tags/$TARGET_TAG"; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TARGET_TAG already exists. Skipping tag and release steps."
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TARGET_TAG does not exist yet. Continuing with tag creation."
+          fi
+
+      - name: Create Git tag (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_tag.outputs.tag_exists != 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -157,7 +170,7 @@ jobs:
           git push origin "v${{ steps.new_version.outputs.new_version }}"
 
       - name: Create GitHub Release (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_tag.outputs.tag_exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
