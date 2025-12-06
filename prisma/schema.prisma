@@ -290,31 +290,33 @@ model introSequenceEvent {
 }
 
 model event {
-  id                 BigInt               @id @default(autoincrement())
-  eventType          event_eventType
-  nextEventId        BigInt?
-  bgImage            String?              @db.VarChar(255)
-  sceneEffect        String?              @db.VarChar(255)
-  bgm                String?              @db.VarChar(255)
-  bgmVolume          Int?
-  se                 String?              @db.VarChar(255)
-  seVolume           Int?
-  seLoop             Boolean?
-  nextEvent          event?               @relation("EventToEvent", fields: [nextEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  other_events       event[]              @relation("EventToEvent")
-  sessionStatHistory sessionStatHistory[]
-  introSequenceEvent introSequenceEvent[]
-  actEvent           actEvent[]
-  eventDialog        eventDialog?
-  eventChoice        eventChoice?
-  eventStatus        eventStatus?
-  eventSimpleText    eventSimpleText?
-  choiceEvent        choiceEvent[]
-  choiceOption       choiceOption[]
-  choiceOptionEventChain choiceOptionEventChain[]
-  endingEvent        endingEvent[]
+  id                      BigInt                   @id @default(autoincrement())
+  eventType               event_eventType
+  nextEventId             BigInt?
+  eventBackgroundImageId  BigInt?
+  sceneEffect             String?                  @db.VarChar(255)
+  bgm                     String?                  @db.VarChar(255)
+  bgmVolume               Int?
+  se                      String?                  @db.VarChar(255)
+  seVolume                Int?
+  seLoop                  Boolean?
+  nextEvent               event?                   @relation("EventToEvent", fields: [nextEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eventBackgroundImage    eventBackgroundImage?    @relation(fields: [eventBackgroundImageId], references: [id])
+  other_events            event[]                  @relation("EventToEvent")
+  sessionStatHistory      sessionStatHistory[]
+  introSequenceEvent      introSequenceEvent[]
+  actEvent                actEvent[]
+  eventDialog             eventDialog?
+  eventChoice             eventChoice?
+  eventStatus             eventStatus?
+  eventSimpleText         eventSimpleText?
+  choiceEvent             choiceEvent[]
+  choiceOption            choiceOption[]
+  choiceOptionEventChain  choiceOptionEventChain[]
+  endingEvent             endingEvent[]
 
   @@index([nextEventId], map: "idx_event_next")
+  @@index([eventBackgroundImageId], map: "idx_event_background_image")
   @@map("event")
 }
 
@@ -324,6 +326,15 @@ enum event_eventType {
   ItemChoice
   Status
   System
+}
+
+model eventBackgroundImage {
+  id       BigInt @id @default(autoincrement())
+  name     String @db.VarChar(255)
+  imageUrl String @unique @db.VarChar(255)
+  event    event[]
+
+  @@map("eventBackgroundImage")
 }
 
 model actEvent {
