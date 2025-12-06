@@ -265,8 +265,10 @@ export class SessionsService {
       });
     }
 
+    const characterImages = await this.loadCharacterImages();
     const events = await this.eventAssembler.buildIntroEvents({
       events: introSequence.introSequenceEvent.map((entry) => entry.event),
+      characterImages,
     });
 
     return {
