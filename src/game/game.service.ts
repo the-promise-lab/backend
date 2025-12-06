@@ -18,11 +18,7 @@ export class GameService {
         bag: true,
         playingCharacterSet: {
           include: {
-            playingCharacter: {
-              include: {
-                character: true,
-              },
-            },
+            playingCharacter: true, // Step 1: Fetch playingCharacter without character
           },
         },
         gameSessionInventory: {
@@ -35,6 +31,64 @@ export class GameService {
 
     if (!session) {
       throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
+    }
+
+    let playingCharacterSetDto = null;
+    if (session.playingCharacterSet) {
+      const { playingCharacter, ...restOfSet } = session.playingCharacterSet;
+
+      // Step 2: Get characterIds
+      const characterIds = playingCharacter.map((pc) => pc.characterId);
+
+      // Step 3: Fetch characters
+      const characters = await this.prisma.character.findMany({
+        where: {
+          id: { in: characterIds },
+        },
+      });
+
+      // Step 4: Create a lookup map
+      const characterMap = new Map(
+        characters.map((char) => [char.id.toString(), char]),
+      );
+
+      // Step 5: Manually assemble and filter
+      const populatedPlayingCharacters = playingCharacter
+        .map((pc) => {
+          const character = characterMap.get(pc.characterId.toString());
+          if (!character) {
+            // This is the key change: if character is missing, we skip this playingCharacter
+            return null;
+          }
+          return {
+            id: Number(pc.id),
+            playingCharacterSetId: Number(pc.playingCharacterSetId),
+            characterId: Number(pc.characterId),
+            character: {
+              id: Number(character.id),
+              code: character.code,
+              name: character.name,
+              age: character.age,
+              description: character.description,
+              selectImage: character.selectImage,
+              portraitImage: character.portraitImage,
+              defaultHp: character.defaultHp,
+              defaultMental: character.defaultMental,
+              bgColor: character.bgColor,
+              borderColor: character.borderColor,
+            },
+            currentHp: pc.currentHp,
+            currentMental: pc.currentMental,
+          };
+        })
+        .filter((pc) => pc !== null); // Remove nulls
+
+      playingCharacterSetDto = {
+        id: Number(restOfSet.id),
+        gameSessionId: Number(restOfSet.gameSessionId),
+        characterGroupId: Number(restOfSet.characterGroupId),
+        playingCharacter: populatedPlayingCharacters,
+      };
     }
 
     return {
@@ -58,37 +112,7 @@ export class GameService {
       endedAt: session.endedAt,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
-      playingCharacterSet: session.playingCharacterSet
-        ? {
-            id: Number(session.playingCharacterSet.id),
-            gameSessionId: Number(session.playingCharacterSet.gameSessionId),
-            characterGroupId: Number(
-              session.playingCharacterSet.characterGroupId,
-            ),
-            playingCharacter: session.playingCharacterSet.playingCharacter.map(
-              (pc) => ({
-                id: Number(pc.id),
-                playingCharacterSetId: Number(pc.playingCharacterSetId),
-                characterId: Number(pc.characterId),
-                character: {
-                  id: Number(pc.character.id),
-                  code: pc.character.code,
-                  name: pc.character.name,
-                  age: pc.character.age,
-                  description: pc.character.description,
-                  selectImage: pc.character.selectImage,
-                  portraitImage: pc.character.portraitImage,
-                  defaultHp: pc.character.defaultHp,
-                  defaultMental: pc.character.defaultMental,
-                  bgColor: pc.character.bgColor,
-                  borderColor: pc.character.borderColor,
-                },
-                currentHp: pc.currentHp,
-                currentMental: pc.currentMental,
-              }),
-            ),
-          }
-        : null,
+      playingCharacterSet: playingCharacterSetDto,
       gameSessionInventory: session.gameSessionInventory.map((inv) => ({
         sessionId: Number(inv.sessionId),
         item: {
