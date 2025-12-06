@@ -48,6 +48,7 @@ const CHOICE_OPTION_INCLUDE = {
 } as const;
 
 const EVENT_RELATIONS = {
+  eventBackgroundImage: true,
   eventDialog: {
     include: {
       eventDialogCharacter: {
@@ -174,7 +175,7 @@ export class EventAssembler {
       type: event.eventType,
       script: this.resolveScript(event),
       characters: this.extractCharacters(event, characterImages),
-      bgImage: event.bgImage ?? null,
+      bgImage: event.eventBackgroundImage?.imageUrl ?? null,
       sceneEffect: event.sceneEffect ?? null,
       bgm: event.bgm ?? null,
       bgmVolume: event.bgmVolume ?? null,
