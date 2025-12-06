@@ -146,6 +146,7 @@ type EndingWithFullRelations = Prisma.endingGetPayload<
 >;
 
 const REPORT_SESSION_INCLUDE = {
+  user: true,
   characterGroup: true,
   bag: true,
   ending: true,
@@ -167,6 +168,10 @@ const REPORT_SESSION_INCLUDE = {
   sessionStatHistory: true,
   currentDay: true,
 } satisfies Prisma.gameSessionDefaultArgs['include'];
+
+type SessionWithReport = Prisma.gameSessionGetPayload<{
+  include: typeof REPORT_SESSION_INCLUDE;
+}>;
 
 type SessionInventoryRecord = Prisma.gameSessionInventoryGetPayload<{
   include: {
@@ -309,7 +314,10 @@ export class SessionsService {
       });
     }
 
-    if (session.status === gameSession_status.IN_PROGRESS) {
+    if (
+      session.status === gameSession_status.IN_PROGRESS ||
+      session.status === gameSession_status.GAME_OVER
+    ) {
       throw this.createBadRequest(
         'REPORT_NOT_AVAILABLE',
         '게임 종료 후 조회할 수 있습니다.',
@@ -321,6 +329,20 @@ export class SessionsService {
         'TAB_ACCESS_DENIED',
         '현재는 결과 탭만 지원합니다.',
       );
+    }
+
+    const ending =
+      session.ending ??
+      (session.status === gameSession_status.SUDDEN_DEATH
+        ? await this.prisma.ending.findFirst({
+            where: {
+              characterGroupId: session.characterGroupId ?? undefined,
+              priority: 8,
+            },
+          })
+        : null);
+    if (ending) {
+      (session as SessionWithReport).ending = ending;
     }
 
     return this.reportAssembler.buildResultReport({
@@ -793,7 +815,7 @@ export class SessionsService {
         data: {
           status: gameSession_status.GAME_END,
           currentActId: null,
-          currentDayId: null,
+          currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
           endingId: endingResolution ? endingResolution.endingId : null,
           endedAt: new Date(),
         },
@@ -821,7 +843,7 @@ export class SessionsService {
       data: {
         status: this.mapFlowStatusToEntityStatus(flowStatus),
         currentActId: null,
-        currentDayId: null,
+        currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
         endedAt: new Date(),
       },
     });
@@ -853,7 +875,7 @@ export class SessionsService {
       data: {
         status: gameSession_status.SUDDEN_DEATH,
         currentActId: null,
-        currentDayId: null,
+        currentDayId: session.currentDayId ?? session.currentDay?.id ?? null,
         endingId: deathEnding ? deathEnding.endingId : null,
         endedAt: new Date(),
       },
@@ -1226,6 +1248,12 @@ export class SessionsService {
 
     for (const change of changes) {
       const itemId = BigInt(change.itemId);
+      const item = await tx.item.findUnique({
+        where: { id: itemId },
+        select: { capacityCost: true },
+      });
+      const capacityCost = item?.capacityCost ?? 0;
+
       const existing = await tx.gameSessionInventory.findUnique({
         where: {
           sessionId_itemId: {
@@ -1275,6 +1303,19 @@ export class SessionsService {
             delta: actualDelta,
           },
         });
+      }
+
+      if (change.quantityChange > 0 && capacityCost > 0) {
+        await tx.gameSession.update({
+          where: { id: session.id },
+          data: {
+            bagCapacityUsed:
+              (session.bagCapacityUsed ?? 0) +
+              capacityCost * change.quantityChange,
+          },
+        });
+        session.bagCapacityUsed =
+          (session.bagCapacityUsed ?? 0) + capacityCost * change.quantityChange;
       }
     }
   }

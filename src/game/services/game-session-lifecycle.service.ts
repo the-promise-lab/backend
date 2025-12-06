@@ -72,13 +72,37 @@ export class GameSessionLifecycleService {
         throw new NotFoundException('게임 세션을 찾을 수 없습니다.');
       }
 
+      const itemIds = dto.items.map((item) => item.itemId);
+      const items = await tx.item.findMany({
+        where: { id: { in: itemIds.map((id) => BigInt(id)) } },
+        select: { id: true, capacityCost: true },
+      });
+
+      if (items.length !== itemIds.length) {
+        throw new NotFoundException(
+          '제출한 아이템 중 존재하지 않는 항목이 있습니다.',
+        );
+      }
+
+      const capacityById = new Map<bigint, number>();
+      items.forEach((it) => capacityById.set(it.id, it.capacityCost));
+
+      const usedCapacity = dto.items.reduce((sum, item) => {
+        const cost = capacityById.get(BigInt(item.itemId)) ?? 0;
+        return sum + cost * item.quantity;
+      }, 0);
+
       await tx.gameSessionInventory.deleteMany({
         where: { sessionId: gameSession.id },
       });
 
       await tx.gameSession.update({
         where: { id: gameSession.id },
-        data: { bagId: dto.bagId, bagConfirmedAt: new Date() },
+        data: {
+          bagId: dto.bagId,
+          bagConfirmedAt: new Date(),
+          bagCapacityUsed: usedCapacity,
+        },
       });
 
       await tx.gameSessionInventory.createMany({

@@ -5,6 +5,9 @@ class SessionReportSessionMetaDto {
   @ApiProperty({ example: 1, description: '게임 세션 ID' })
   id: number;
 
+  @ApiProperty({ description: '사용자 이름(카카오 로그인명)' })
+  userName: string;
+
   @ApiPropertyOptional({ description: '캐릭터 그룹 코드' })
   characterGroupCode?: string | null;
 
@@ -112,6 +115,9 @@ class SessionReportBagDto {
 
   @ApiPropertyOptional({ description: '가방 등급' })
   grade?: string | null;
+
+  @ApiPropertyOptional({ description: '가방 효율(%)' })
+  efficiency?: number | null;
 }
 
 class SessionReportInventoryItemDto {
