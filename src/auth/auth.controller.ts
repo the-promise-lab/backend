@@ -20,6 +20,9 @@ import 'express-session';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { SocialProfile } from './social-profile.interface';
+import { KakaoTokenDto } from './dto/kakao-token.dto';
+import { AuthTokenDto } from './dto/auth-token.dto';
+import { ApiResponse } from '@nestjs/swagger';
 
 declare module 'express-session' {
   interface SessionData {
@@ -49,17 +52,13 @@ export class AuthController {
   ) {}
 
   @Post('kakao/token')
+  @ApiResponse({ type: AuthTokenDto })
   async exchangeCodeForToken(
-    @Body() body: { code: string; redirectUri: string },
-  ) {
+    @Body() kakaoTokenDto: KakaoTokenDto,
+  ): Promise<AuthTokenDto> {
     this.logger.debug(
-      `[exchangeCodeForToken] Method invoked. code: ${body.code}, redirectUri: ${body.redirectUri}`,
+      `[exchangeCodeForToken] Method invoked. code: ${kakaoTokenDto.code}, redirectUri: ${kakaoTokenDto.redirectUri}`,
     );
-    if (!body.code || !body.redirectUri) {
-      throw new UnauthorizedException(
-        'Authorization code and redirectUri are required',
-      );
-    }
 
     const clientId = this.configService.get('KAKAO_CLIENT_ID');
     const clientSecret = this.configService.get('KAKAO_CLIENT_SECRET');
@@ -69,8 +68,8 @@ export class AuthController {
     params.append('grant_type', 'authorization_code');
     params.append('client_id', clientId);
     params.append('client_secret', clientSecret);
-    params.append('redirect_uri', body.redirectUri);
-    params.append('code', body.code);
+    params.append('redirect_uri', kakaoTokenDto.redirectUri);
+    params.append('code', kakaoTokenDto.code);
 
     try {
       // 1. Exchange code for Kakao token
