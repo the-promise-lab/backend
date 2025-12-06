@@ -1,13 +1,23 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { event_eventType } from '@prisma/client';
-import { IsInt, IsEnum, IsString, IsBoolean, IsOptional } from 'class-validator';
+import {
+  IsInt,
+  IsEnum,
+  IsString,
+  IsBoolean,
+  IsOptional,
+} from 'class-validator';
 
 export class EventDto {
   @ApiProperty({ example: 1, description: '이벤트 ID' })
   @IsInt()
   id: number;
 
-  @ApiProperty({ enum: event_eventType, example: 'Simple', description: '이벤트 타입' })
+  @ApiProperty({
+    enum: event_eventType,
+    example: 'Simple',
+    description: '이벤트 타입',
+  })
   @IsEnum(event_eventType)
   eventType: event_eventType;
 
@@ -16,7 +26,11 @@ export class EventDto {
   @IsOptional()
   nextEventId: number | null;
 
-  @ApiProperty({ example: 'bg.png', description: '배경 이미지', nullable: true })
+  @ApiProperty({
+    example: 'bg.png',
+    description: '배경 이미지',
+    nullable: true,
+  })
   @IsString()
   @IsOptional()
   bgImage: string | null;
@@ -46,7 +60,11 @@ export class EventDto {
   @IsOptional()
   seVolume: number | null;
 
-  @ApiProperty({ example: false, description: '효과음 반복 여부', nullable: true })
+  @ApiProperty({
+    example: false,
+    description: '효과음 반복 여부',
+    nullable: true,
+  })
   @IsBoolean()
   @IsOptional()
   seLoop: boolean | null;

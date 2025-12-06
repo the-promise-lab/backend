@@ -17,7 +17,10 @@ export class SelectCharacterSetResultDto {
   @IsOptional()
   characterGroupId: number | null;
 
-  @ApiProperty({ type: [PlayingCharacterDto], description: '플레이 중인 캐릭터 목록' })
+  @ApiProperty({
+    type: [PlayingCharacterDto],
+    description: '플레이 중인 캐릭터 목록',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => PlayingCharacterDto)

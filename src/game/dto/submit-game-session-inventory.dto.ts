@@ -16,8 +16,11 @@ export class SubmitGameSessionInventoryDto {
   @ApiProperty({ example: 1, description: '가방 ID' })
   @IsInt()
   bagId: number;
-  
-  @ApiProperty({ type: [GameSessionInventoryItemDto], description: '아이템 목록' })
+
+  @ApiProperty({
+    type: [GameSessionInventoryItemDto],
+    description: '아이템 목록',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => GameSessionInventoryItemDto)

@@ -32,7 +32,7 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
     done: (err?: Error, user?: any, info?: any) => void,
   ): Promise<any> {
     this.logger.debug(`[KakaoStrategy] Validate method invoked.`);
-    
+
     const socialProfile: SocialProfile = {
       provider: 'kakao',
       snsId: String(profile.id),

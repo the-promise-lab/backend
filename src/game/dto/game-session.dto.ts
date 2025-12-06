@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsDate, IsInt, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsDate,
+  IsInt,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { PlayingCharacterSetDto } from './playing-character-set.dto';
 import { GameSessionInventoryDto } from './game-session-inventory.dto';
 import { BagDto } from './bag.dto';
@@ -29,7 +36,11 @@ export class GameSessionDto {
   @IsOptional()
   bagConfirmedAt: Date | null;
 
-  @ApiProperty({ example: 'IN_PROGRESS', description: '게임 세션 상태', nullable: true })
+  @ApiProperty({
+    example: 'IN_PROGRESS',
+    description: '게임 세션 상태',
+    nullable: true,
+  })
   @IsString()
   @IsOptional()
   status: string | null;
@@ -66,15 +77,21 @@ export class GameSessionDto {
   @IsDate()
   updatedAt: Date;
 
-  @ApiProperty({ type: PlayingCharacterSetDto, nullable: true, description: '플레이 중인 캐릭터 셋' })
+  @ApiProperty({
+    type: PlayingCharacterSetDto,
+    nullable: true,
+    description: '플레이 중인 캐릭터 셋',
+  })
   @ValidateNested()
   @Type(() => PlayingCharacterSetDto)
   @IsOptional()
   playingCharacterSet: PlayingCharacterSetDto | null;
-  @ApiProperty({ type: [GameSessionInventoryDto], description: '게임 세션 인벤토리' })
+  @ApiProperty({
+    type: [GameSessionInventoryDto],
+    description: '게임 세션 인벤토리',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => GameSessionInventoryDto)
   gameSessionInventory: GameSessionInventoryDto[];
 }
-
