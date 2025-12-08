@@ -135,12 +135,12 @@ export class EventAssembler {
     const events: SessionEventDto[] = [];
     const choiceOptionMap: Record<number, ChoiceOptionRecord[]> = {};
 
-    const sortedRecords = [...params.actEventRecords].sort(
-      (a, b) => a.seqOrder - b.seqOrder,
-    );
+    const sortedRecords = [...params.actEventRecords].sort((a, b) => {
+      return a.seqOrder - b.seqOrder;
+    });
 
     for (const record of sortedRecords) {
-      const { dto, choiceOptions } = this.mapEvent(
+      const { dto, choiceOptions } = await this.mapEvent(
         record.event,
         params.inventoryItems,
         params.characterImages,
@@ -160,15 +160,15 @@ export class EventAssembler {
     return { events, choiceOptionMap };
   }
 
-  mapEvent(
+  async mapEvent(
     event: EventWithRelations,
     inventoryItems: InventoryItemSummary[],
     characterImages: CharacterImageLookup = {},
-  ): {
+  ): Promise<{
     dto: SessionEventDto;
     choiceOptions: ChoiceOptionRecord[];
-  } {
-    const choiceExtraction = this.extractChoice(event, inventoryItems);
+  }> {
+    const choiceExtraction = await this.extractChoice(event, inventoryItems);
 
     const dto: SessionEventDto = {
       eventId: Number(event.id),
@@ -194,9 +194,12 @@ export class EventAssembler {
   async buildIntroEvents(
     params: BuildIntroEventsParams,
   ): Promise<SessionEventDto[]> {
-    return params.events.map(
-      (event) => this.mapEvent(event, [], params.characterImages).dto,
-    );
+    const results: SessionEventDto[] = [];
+    for (const event of params.events) {
+      const { dto } = await this.mapEvent(event, [], params.characterImages);
+      results.push(dto);
+    }
+    return results;
   }
 
   async buildEventChain(
@@ -222,7 +225,7 @@ export class EventAssembler {
         break;
       }
 
-      const { dto } = this.mapEvent(event, [], characterImages);
+      const { dto } = await this.mapEvent(event, [], characterImages);
       chain.push(dto);
       cursor = event.nextEventId;
     }
@@ -251,11 +254,11 @@ export class EventAssembler {
 
     const grouped = new Map<number, SessionEventDto[]>();
     for (const entry of chainEntries) {
-      const dto = this.mapEvent(
+      const { dto } = await this.mapEvent(
         entry.event as EventWithRelations,
         params.inventoryItems,
         params.characterImages,
-      ).dto;
+      );
       const optionId = Number(entry.choiceOptionId);
       const bucket = grouped.get(optionId);
       if (bucket) {
@@ -374,13 +377,13 @@ export class EventAssembler {
     }));
   }
 
-  private extractChoice(
+  private async extractChoice(
     event: EventWithRelations,
     inventoryItems: InventoryItemSummary[],
-  ): {
+  ): Promise<{
     choiceDto: SessionChoiceDto | null;
     choiceOptions: ChoiceOptionRecord[];
-  } {
+  }> {
     if (
       event.eventType !== event_eventType.StoryChoice &&
       event.eventType !== event_eventType.ItemChoice
@@ -390,10 +393,11 @@ export class EventAssembler {
 
     const choiceEvent = this.pickChoiceEvent(event.choiceEvent);
     const optionEntities = choiceEvent?.choiceOption ?? [];
-    const options: SessionChoiceOptionDto[] = optionEntities.map((option) => {
-      const { dto } = this.mapChoiceOption(option, inventoryItems, event);
-      return dto;
-    });
+    const options: SessionChoiceOptionDto[] = [];
+    for (const option of optionEntities) {
+      const { dto } = await this.mapChoiceOption(option, inventoryItems, event);
+      options.push(dto);
+    }
 
     const choiceDto: SessionChoiceDto = {
       title: event.eventChoice?.choiceTitle ?? '',
@@ -416,19 +420,28 @@ export class EventAssembler {
     return { choiceDto, choiceOptions: rawOptions };
   }
 
-  private mapChoiceOption(
+  private async mapChoiceOption(
     option: ChoiceOptionWithRelations,
     inventoryItems: InventoryItemSummary[],
     event: EventWithRelations,
-  ): { dto: SessionChoiceOptionDto; matchedItem: InventoryItemSummary | null } {
+  ): Promise<{
+    dto: SessionChoiceOptionDto;
+    matchedItem: InventoryItemSummary | null;
+  }> {
     const isStoryChoice = event.eventType === event_eventType.StoryChoice;
     let matchedItem: InventoryItemSummary | null = null;
+    let randomCategoryItem: InventoryItemSummary | null = null;
 
     if (!isStoryChoice && option.itemCategoryId) {
       matchedItem = this.findInventoryMatch(
         Number(option.itemCategoryId),
         inventoryItems,
       );
+      if (!matchedItem) {
+        randomCategoryItem = await this.pickRandomCategoryItem(
+          Number(option.itemCategoryId),
+        );
+      }
     }
 
     const eventChainLength = option.eventChain?.length ?? 0;
@@ -447,15 +460,17 @@ export class EventAssembler {
       isSelectable = hasContinuation && matchedItem !== null;
     }
 
+    const displayItem = matchedItem ?? randomCategoryItem;
+
     const dto: SessionChoiceOptionDto = {
       choiceOptionId: Number(option.id),
       text: option.title ?? '',
       itemCategoryId: option.itemCategoryId
         ? Number(option.itemCategoryId)
         : null,
-      itemId: matchedItem ? matchedItem.itemId : null,
-      itemName: matchedItem ? matchedItem.name : null,
-      itemImage: matchedItem ? matchedItem.image : null,
+      itemId: displayItem ? displayItem.itemId : null,
+      itemName: displayItem ? displayItem.name : null,
+      itemImage: displayItem ? displayItem.image : null,
       quantity: matchedItem ? matchedItem.quantity : null,
       isSelectable,
     };
@@ -473,6 +488,40 @@ export class EventAssembler {
           item.quantity > 0 && item.categoryIds.some((id) => id === categoryId),
       ) ?? null
     );
+  }
+
+  private async pickRandomCategoryItem(
+    categoryId: number,
+  ): Promise<InventoryItemSummary | null> {
+    const candidates = (
+      await this.prisma.itemToCategory.findMany({
+        where: { categoryId: BigInt(categoryId) },
+        include: {
+          item: {
+            include: {
+              itemToCategory: true,
+            },
+          },
+        },
+      })
+    ).map((relation) => {
+      return {
+        itemId: Number(relation.itemId),
+        quantity: 0,
+        categoryIds:
+          relation.item.itemToCategory?.map((rel) => Number(rel.categoryId)) ??
+          [],
+        name: relation.item.name ?? null,
+        image: relation.item.image ?? null,
+      };
+    });
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const randomIndex = Math.floor(Math.random() * candidates.length);
+    return candidates[randomIndex];
   }
 
   private pickChoiceEvent(
