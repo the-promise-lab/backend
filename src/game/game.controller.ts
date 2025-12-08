@@ -6,6 +6,7 @@ import { SelectCharacterSetResultDto } from './dto/select-character-set-result.d
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiOkResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -96,6 +97,41 @@ export class GameController {
   })
   getSetupInfo(): Promise<SetupInfoDto> {
     return this.gameService.getSetupInfo();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('resources')
+  @ApiOperation({ summary: '게임 리소스 CDN 경로 조회' })
+  @ApiOkResponse({
+    description: '디렉터리별 게임 리소스 목록 반환',
+    schema: {
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+      },
+      example: {
+        bg: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/bg/bg_shelter_day.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/bg/bg_shelter_night.png',
+        ],
+        character: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/character/bc/default.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/character/hb/default.png',
+        ],
+        cut_scene: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/cut_scene/event_11.png',
+        ],
+        item: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/item/item_mineral_water.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/item/item_energy_bar.png',
+        ],
+      },
+    },
+  })
+  getResources(): Promise<Record<string, string[]>> {
+    return this.gameService.getResources();
   }
 
   @UseGuards(AuthGuard('jwt'))
