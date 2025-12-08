@@ -6,6 +6,7 @@ import { SelectCharacterSetResultDto } from './dto/select-character-set-result.d
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiOkResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -96,6 +97,31 @@ export class GameController {
   })
   getSetupInfo(): Promise<SetupInfoDto> {
     return this.gameService.getSetupInfo();
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('resources')
+  @ApiOperation({ summary: '게임 리소스 CDN 경로 조회' })
+  @ApiOkResponse({
+    description: '디렉터리별 게임 리소스 목록 반환',
+    schema: {
+      type: 'object',
+      additionalProperties: {
+        type: 'array',
+        items: { type: 'string', format: 'uri' },
+      },
+      example: {
+        item: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/item/item_mineral_water.png',
+        ],
+        bg: [],
+        character: [],
+      },
+    },
+  })
+  getResources(): Promise<Record<string, string[]>> {
+    return this.gameService.getResources();
   }
 
   @UseGuards(AuthGuard('jwt'))

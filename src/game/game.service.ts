@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SelectCharacterSetDto } from './dto/select-character-set.dto';
 import { SubmitGameSessionInventoryDto } from './dto/submit-game-session-inventory.dto';
 import { GameSessionLifecycleService } from './services/game-session-lifecycle.service';
+import { GameResourceService } from './services/game-resource.service';
 
 @Injectable()
 export class GameService {
   constructor(
     private prisma: PrismaService,
     private readonly gameSessionLifecycleService: GameSessionLifecycleService,
+    private readonly gameResourceService: GameResourceService,
   ) {}
 
   async findGameSession(userId: number) {
@@ -297,5 +299,9 @@ export class GameService {
   ) {
     await this.gameSessionLifecycleService.confirmInventory(userId, dto);
     return this.findGameSession(userId);
+  }
+
+  async getResources(): Promise<Record<string, string[]>> {
+    return this.gameResourceService.getResources();
   }
 }
