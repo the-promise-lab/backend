@@ -129,11 +129,6 @@ export type CharacterImageLookup = Record<
 export class EventAssembler {
   constructor(private readonly prisma: PrismaService) {}
 
-  private readonly categoryItemCache = new Map<
-    number,
-    InventoryItemSummary[] | null
-  >();
-
   async buildActEvents(
     params: BuildActEventsParams,
   ): Promise<BuildActEventsResult> {
@@ -498,38 +493,30 @@ export class EventAssembler {
   private async pickRandomCategoryItem(
     categoryId: number,
   ): Promise<InventoryItemSummary | null> {
-    const cached = this.categoryItemCache.get(categoryId);
-    const candidates =
-      cached ??
-      (
-        await this.prisma.itemToCategory.findMany({
-          where: { categoryId: BigInt(categoryId) },
-          include: {
-            item: {
-              include: {
-                itemToCategory: true,
-              },
+    const candidates = (
+      await this.prisma.itemToCategory.findMany({
+        where: { categoryId: BigInt(categoryId) },
+        include: {
+          item: {
+            include: {
+              itemToCategory: true,
             },
           },
-        })
-      ).map((relation) => {
-        return {
-          itemId: Number(relation.itemId),
-          quantity: 0,
-          categoryIds:
-            relation.item.itemToCategory?.map((rel) =>
-              Number(rel.categoryId),
-            ) ?? [],
-          name: relation.item.name ?? null,
-          image: relation.item.image ?? null,
-        };
-      });
+        },
+      })
+    ).map((relation) => {
+      return {
+        itemId: Number(relation.itemId),
+        quantity: 0,
+        categoryIds:
+          relation.item.itemToCategory?.map((rel) => Number(rel.categoryId)) ??
+          [],
+        name: relation.item.name ?? null,
+        image: relation.item.image ?? null,
+      };
+    });
 
-    if (!cached) {
-      this.categoryItemCache.set(categoryId, candidates);
-    }
-
-    if (!candidates || candidates.length === 0) {
+    if (candidates.length === 0) {
       return null;
     }
 
