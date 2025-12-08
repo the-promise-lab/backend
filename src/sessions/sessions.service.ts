@@ -926,23 +926,25 @@ export class SessionsService {
     }
 
     return {
-      events: this.mapEndingEvents(ending, inventoryItems),
+      events: await this.mapEndingEvents(ending, inventoryItems),
       meta: this.buildEndingMeta(ending),
       endingId: ending.id,
     };
   }
 
-  private mapEndingEvents(
+  private async mapEndingEvents(
     ending: { endingEvent: EndingWithEvents['endingEvent'] },
     inventoryItems: InventoryItemSummary[],
-  ): SessionEventDto[] {
-    return ending.endingEvent.map((endingEvent) => {
-      const { dto } = this.eventAssembler.mapEvent(
+  ): Promise<SessionEventDto[]> {
+    const events: SessionEventDto[] = [];
+    for (const endingEvent of ending.endingEvent) {
+      const { dto } = await this.eventAssembler.mapEvent(
         endingEvent.event,
         inventoryItems,
       );
-      return dto;
-    });
+      events.push(dto);
+    }
+    return events;
   }
 
   private buildEndingMeta(
@@ -982,7 +984,7 @@ export class SessionsService {
     for (const ending of endings) {
       if (this.isEndingSatisfied(ending.endingCondition, evaluationContext)) {
         return {
-          events: this.mapEndingEvents(ending, inventoryItems),
+          events: await this.mapEndingEvents(ending, inventoryItems),
           meta: this.buildEndingMeta(ending),
           endingId: ending.id,
         };
