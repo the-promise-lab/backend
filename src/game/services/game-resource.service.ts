@@ -8,6 +8,7 @@ interface CacheEntry<T> {
 }
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const ROOT_DIRECTORY_KEY = 'root';
 
 /**
  * GameResourceService groups object storage paths and converts them to CDN URLs.
@@ -48,19 +49,28 @@ export class GameResourceService {
     cdnBase: string,
   ): Record<string, string[]> {
     return names.reduce<Record<string, string[]>>((acc, name) => {
-      if (!name.startsWith('img/') || name.endsWith('/')) {
+      if (name.endsWith('/')) {
         return acc;
       }
-      const relative = name.slice(4);
-      const [directory, ...rest] = relative.split('/');
-      if (!directory || rest.length === 0) {
-        return acc;
-      }
+      const directory = this.resolveDirectory(name);
       const url = `${cdnBase}/${name}`;
       const existing = acc[directory] ?? [];
       existing.push(url);
       acc[directory] = existing;
       return acc;
     }, {});
+  }
+
+  private resolveDirectory(name: string): string {
+    if (name.startsWith('img/')) {
+      const trimmed = name.slice(4);
+      const [primary] = trimmed.split('/');
+      return primary || ROOT_DIRECTORY_KEY;
+    }
+    const [top] = name.split('/');
+    if (!top) {
+      return ROOT_DIRECTORY_KEY;
+    }
+    return top;
   }
 }

@@ -44,14 +44,14 @@ export class ObjectStorageService {
   }
 
   /**
-   * Retrieves object names under the img/ prefix with 10-minute caching.
+   * Retrieves all object names with 10-minute caching.
    */
   async getObjectNames(): Promise<string[]> {
     if (this.listCache && Date.now() < this.listCache.expiresAt) {
       return this.listCache.value;
     }
     try {
-      const names = await this.listObjectsByPrefix('img/');
+      const names = await this.listAllObjects();
       this.listCache = {
         value: names,
         expiresAt: Date.now() + this.cacheTtlMs,
@@ -68,10 +68,9 @@ export class ObjectStorageService {
     }
   }
 
-  private async listObjectsByPrefix(prefix: string): Promise<string[]> {
+  private async listAllObjects(): Promise<string[]> {
     const input: ListObjectsV2CommandInput = {
       Bucket: this.bucket,
-      Prefix: prefix,
     };
     const names: string[] = [];
     let continuationToken: string | undefined;

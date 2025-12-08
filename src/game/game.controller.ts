@@ -112,11 +112,21 @@ export class GameController {
         items: { type: 'string', format: 'uri' },
       },
       example: {
+        bg: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/bg/bg_shelter_day.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/bg/bg_shelter_night.png',
+        ],
+        character: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/character/bc/default.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/character/hb/default.png',
+        ],
+        cut_scene: [
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/cut_scene/event_11.png',
+        ],
         item: [
           'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/item/item_mineral_water.png',
+          'https://21009ea64690489baefd3170429f0a50.kakaoiedge.com/img/item/item_energy_bar.png',
         ],
-        bg: [],
-        character: [],
       },
     },
   })
