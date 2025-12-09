@@ -306,11 +306,9 @@ export class SessionsService {
   async getSessionReport(params: {
     readonly userId: number;
     readonly sessionId: number;
-    readonly tab?: SessionReportTab;
-    readonly includeInventory?: boolean;
   }): Promise<SessionReportResponseDto> {
-    const tab = params.tab ?? SessionReportTab.RESULT;
-    const includeInventory = params.includeInventory ?? true;
+    const tab = SessionReportTab.RESULT;
+    const includeInventory = true;
     const session = await this.prisma.gameSession.findFirst({
       where: { id: BigInt(params.sessionId), userId: BigInt(params.userId) },
       include: REPORT_SESSION_INCLUDE,
@@ -330,13 +328,6 @@ export class SessionsService {
       throw this.createBadRequest(
         'REPORT_NOT_AVAILABLE',
         '게임 종료 후 조회할 수 있습니다.',
-      );
-    }
-
-    if (tab !== SessionReportTab.RESULT) {
-      throw this.createBadRequest(
-        'TAB_ACCESS_DENIED',
-        '현재는 결과 탭만 지원합니다.',
       );
     }
 

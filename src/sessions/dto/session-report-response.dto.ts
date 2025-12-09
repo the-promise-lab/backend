@@ -90,11 +90,11 @@ class SessionReportHiddenStatDto {
   @ApiProperty({ description: '최대값' })
   maxValue: number;
 
-  @ApiProperty({ description: '등급' })
-  grade: string;
-
   @ApiPropertyOptional({ description: '설명' })
   description?: string | null;
+
+  @ApiPropertyOptional({ description: '등급' })
+  grade?: string | null;
 }
 
 class SessionReportBagDto {
@@ -118,6 +118,15 @@ class SessionReportBagDto {
 
   @ApiPropertyOptional({ description: '가방 효율(%)' })
   efficiency?: number | null;
+
+  @ApiPropertyOptional({ description: '가방 이미지 URL' })
+  bagImageUrl?: string | null;
+
+  @ApiPropertyOptional({ description: '담은 아이템 개수' })
+  ownedItemCount?: number | null;
+
+  @ApiPropertyOptional({ description: '실제 사용한 아이템 개수' })
+  usedItemCount?: number | null;
 }
 
 class SessionReportInventoryItemDto {
@@ -129,6 +138,9 @@ class SessionReportInventoryItemDto {
 
   @ApiProperty({ description: '남은 수량' })
   quantity: number;
+
+  @ApiPropertyOptional({ description: '아이템 이미지 URL' })
+  imageUrl?: string | null;
 }
 
 class SessionReportPointDto {
