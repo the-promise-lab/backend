@@ -185,7 +185,10 @@ export class ReportAssembler {
       capacity > 0 && usedCapacity !== null
         ? Number(((usedCapacity / capacity) * 100).toFixed(2))
         : null;
-    const efficiency = this.computeBagEfficiency(session);
+    const ownedItemCount = this.computeOwnedItemCount(session);
+    const usedItemCount = this.computeUsedItemCount(session);
+    const efficiency = this.computeBagEfficiency(ownedItemCount, usedItemCount);
+    const grade = this.computeBagGrade(efficiency);
 
     return {
       bagId: session.bag ? Number(session.bag.id) : 0,
@@ -193,8 +196,11 @@ export class ReportAssembler {
       capacity,
       usedCapacity,
       usageRate,
-      grade: null,
+      grade,
       efficiency,
+      bagImageUrl: session.bag?.image ?? null,
+      ownedItemCount,
+      usedItemCount,
     };
   }
 
@@ -203,6 +209,7 @@ export class ReportAssembler {
       itemId: Number(inv.itemId),
       itemName: inv.item.name,
       quantity: inv.quantity,
+      imageUrl: inv.item.image ?? null,
     }));
   }
 
@@ -299,28 +306,50 @@ export class ReportAssembler {
         name: 'LifePoint',
         value: session.lifePoint,
         maxValue: 100,
-        grade: null,
         description: '세션의 생존 포인트',
       },
     ];
   }
 
-  private computeBagEfficiency(
+  private computeOwnedItemCount(
     session: SessionWithReportRelations,
   ): number | null {
     const ownedCount = session.gameSessionInventory.reduce(
       (sum, inv) => sum + inv.quantity,
       0,
     );
-    if (ownedCount === 0) {
-      return null;
-    }
+    return ownedCount === 0 ? null : ownedCount;
+  }
 
+  private computeUsedItemCount(session: SessionWithReportRelations): number {
     const usedCount = session.gameSessionHistory.filter(
       (h) => h.itemId !== null,
     ).length;
+    return usedCount;
+  }
 
-    const efficiency = (usedCount / ownedCount) * 100;
+  private computeBagEfficiency(
+    ownedCount: number | null,
+    usedCount: number | null,
+  ): number | null {
+    if (!ownedCount || ownedCount === 0) {
+      return null;
+    }
+    const used = usedCount ?? 0;
+    const efficiency = (used / ownedCount) * 100;
     return Number(efficiency.toFixed(2));
+  }
+
+  private computeBagGrade(efficiency: number | null): string | null {
+    if (efficiency === null) {
+      return null;
+    }
+    if (efficiency >= 80) {
+      return '우수';
+    }
+    if (efficiency >= 50) {
+      return '표준';
+    }
+    return '미달';
   }
 }

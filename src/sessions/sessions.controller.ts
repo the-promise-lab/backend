@@ -4,7 +4,6 @@ import {
   Get,
   Param,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -23,7 +22,6 @@ import { Request } from 'express';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
 import { SessionChoiceOutcomeDto } from './dto/session-choice-outcome.dto';
-import { SessionReportQueryDto } from './dto/session-report-query.dto';
 import { SessionReportResponseDto } from './dto/session-report-response.dto';
 import { AuthGuard } from '@nestjs/passport';
 
@@ -99,13 +97,10 @@ export class SessionsController {
   getSessionReport(
     @Req() req: Request,
     @Param('sessionId') sessionId: string,
-    @Query() query: SessionReportQueryDto,
   ): Promise<SessionReportResponseDto> {
     return this.sessionsService.getSessionReport({
       userId: Number((req.user as { id: string }).id),
       sessionId: Number(sessionId),
-      tab: query.tab,
-      includeInventory: query.includeInventory,
     });
   }
 }
