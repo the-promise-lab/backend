@@ -40,6 +40,7 @@ import {
   CharacterImageLookup,
   InventoryItemSummary,
 } from './utils/event-assembler';
+import { PlayingCharacterStatusDto } from './dto/playing-character-status.dto';
 import { IntroRequestDto } from './dto/intro-request.dto';
 import { IntroResponseDto } from './dto/intro-response.dto';
 import { SessionReportTab } from './dto/session-report-tab.enum';
@@ -505,8 +506,21 @@ export class SessionsService {
       day: this.toDayMeta(act.day),
       act: this.toActMeta(act),
       events,
+      playingCharacters: this.mapPlayingCharacters(session),
       ending: null,
     };
+  }
+
+  private mapPlayingCharacters(
+    session: SessionWithState,
+  ): PlayingCharacterStatusDto[] {
+    const characters = session.playingCharacterSet?.playingCharacter ?? [];
+    return characters.map((pc) => ({
+      characterCode: pc.character.code,
+      characterId: Number(pc.characterId),
+      currentHp: pc.currentHp ?? 0,
+      currentMental: pc.currentMental ?? 0,
+    }));
   }
 
   private async loadCharacterImages(): Promise<CharacterImageLookup> {
@@ -688,6 +702,7 @@ export class SessionsService {
         day: this.toDayMeta(currentAct.day),
         act: null,
         events: [],
+        playingCharacters: this.mapPlayingCharacters(session),
         ending: null,
       };
     }
@@ -827,6 +842,7 @@ export class SessionsService {
         day: null,
         act: null,
         events: terminalEvents,
+        playingCharacters: this.mapPlayingCharacters(session),
         ending: endingResolution?.meta ?? null,
       };
     }
@@ -854,6 +870,7 @@ export class SessionsService {
       day: null,
       act: null,
       events: terminalEvents,
+      playingCharacters: this.mapPlayingCharacters(session),
       ending: this.resolveEndingMeta(session, flowStatus),
     };
   }
@@ -887,6 +904,7 @@ export class SessionsService {
       day: null,
       act: null,
       events,
+      playingCharacters: this.mapPlayingCharacters(session),
       ending: deathEnding?.meta ?? null,
     };
   }

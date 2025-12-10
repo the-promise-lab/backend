@@ -12,6 +12,7 @@ import { SessionDayMetaDto } from './session-day-meta.dto';
 import { SessionActMetaDto } from './session-act-meta.dto';
 import { SessionEventDto } from './session-event.dto';
 import { SessionEndingMetaDto } from './session-ending-meta.dto';
+import { PlayingCharacterStatusDto } from './playing-character-status.dto';
 
 /**
  * NextActResponseDto is returned whenever the client requests the next Act bundle.
@@ -47,6 +48,15 @@ export class NextActResponseDto {
   @Type(() => SessionActMetaDto)
   @IsOptional()
   act: SessionActMetaDto | null;
+
+  @ApiProperty({
+    type: [PlayingCharacterStatusDto],
+    description: '현재 플레이 중인 캐릭터 스탯',
+  })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PlayingCharacterStatusDto)
+  playingCharacters: PlayingCharacterStatusDto[];
 
   @ApiProperty({
     type: [SessionEventDto],
