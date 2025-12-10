@@ -30,11 +30,31 @@ function createSwaggerBasicAuthMiddleware(
       res.status(401).send('Authentication required');
       return;
     }
-    const base64Credentials = authHeader.split(' ')[1];
-    const credentials = Buffer.from(base64Credentials, 'base64').toString(
-      'utf8',
-    );
+    const [, base64Credentials] = authHeader.split(' ');
+
+    if (!base64Credentials) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
+      res.status(401).send('Authentication required');
+      return;
+    }
+
+    let credentials: string;
+    try {
+      credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
+    } catch {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
+      res.status(401).send('Invalid credentials');
+      return;
+    }
+
     const [requestId, requestPassword] = credentials.split(':');
+
+    if (!requestId || !requestPassword) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
+      res.status(401).send('Invalid credentials');
+      return;
+    }
+
     if (requestId !== id || requestPassword !== password) {
       res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
       res.status(401).send('Invalid credentials');
