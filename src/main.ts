@@ -11,6 +11,38 @@ import * as cookieParser from 'cookie-parser';
 import * as session from 'express-session'; // Import express-session
 import * as MySQLStore from 'express-mysql-session';
 import { URL } from 'url';
+import { Request, Response, NextFunction } from 'express';
+
+const swaggerId = process.env.SWAGGER_ID;
+const swaggerPassword = process.env.SWAGGER_PW;
+
+function createSwaggerBasicAuthMiddleware(
+  id: string,
+  password: string,
+): (req: Request, res: Response, next: NextFunction) => void {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const rawAuthHeader = req.headers.authorization;
+    const authHeader = Array.isArray(rawAuthHeader)
+      ? rawAuthHeader[0]
+      : rawAuthHeader;
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
+      res.status(401).send('Authentication required');
+      return;
+    }
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString(
+      'utf8',
+    );
+    const [requestId, requestPassword] = credentials.split(':');
+    if (requestId !== id || requestPassword !== password) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Swagger"');
+      res.status(401).send('Invalid credentials');
+      return;
+    }
+    next();
+  };
+}
 
 // BigInt serialization fix
 (BigInt.prototype as any).toJSON = function () {
@@ -25,6 +57,20 @@ async function bootstrap() {
   );
 
   const app = await NestFactory.create(AppModule);
+
+  if (!swaggerId || !swaggerPassword) {
+    logger.error(
+      'SWAGGER_ID and SWAGGER_PW environment variables are not defined.',
+    );
+    throw new Error(
+      'SWAGGER_ID and SWAGGER_PW are required to protect Swagger docs.',
+    );
+  }
+
+  const swaggerBasicAuthMiddleware = createSwaggerBasicAuthMiddleware(
+    swaggerId,
+    swaggerPassword,
+  );
 
   // Correctly set 'trust proxy' by getting the underlying Express adapter instance
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
@@ -125,6 +171,7 @@ async function bootstrap() {
     )
     .build();
 
+  app.use(['/api/docs', '/api/docs-json'], swaggerBasicAuthMiddleware);
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
