@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -1403,6 +1404,8 @@ export class SessionsService {
     }
   }
 
+  private readonly logger = new Logger(SessionsService.name);
+
   private async applyClientUpdates(
     session: SessionWithState,
     updates?: NextActUpdatesDto,
@@ -1410,6 +1413,10 @@ export class SessionsService {
     if (!updates) {
       return session;
     }
+
+    this.logger.debug(
+      `Applying Client Updates for Session ${session.id}: ${JSON.stringify(updates)}`,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await this.applyCharacterStatusChanges(
@@ -1520,7 +1527,11 @@ export class SessionsService {
 
     for (const change of changes) {
       const normalizedType = change.statType.toLowerCase();
-      if (normalizedType === 'lifepoint') {
+      if (
+        normalizedType === 'lifepoint' ||
+        normalizedType === 'life_point' ||
+        normalizedType === 'life point'
+      ) {
         this.ensureLifePointInitialized(session.lifePoint);
         await tx.gameSession.update({
           where: { id: session.id },
