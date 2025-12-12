@@ -402,6 +402,7 @@ export class SessionsService {
         FROM CTE_UserTotalXP
       )
       SELECT * FROM CTE_Ranking
+      ORDER BY ranking ASC
     `;
 
     const allRankings = await this.prisma.$queryRaw<
@@ -612,7 +613,7 @@ export class SessionsService {
       const characterNames =
         session.playingCharacterSet?.playingCharacter
           .map((pc) => pc.character.name)
-          .join('&') ?? 'Unknown';
+          .join(',') ?? 'Unknown';
 
       // Date Formatting
       // session.updatedAt -> "25.01.21" / "14:30"

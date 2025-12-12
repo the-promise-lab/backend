@@ -18,7 +18,6 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { IntroRequestDto } from './dto/intro-request.dto';
@@ -29,6 +28,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { RankingResponseDto } from './dto/ranking-response.dto';
 import { EndingCollectionResponseDto } from './dto/collection-response.dto';
 import { HistoryResponseDto } from './dto/history-response.dto';
+import { PaginationQueryDto } from './dto/pagination-query.dto';
 
 /**
  * SessionsController handles the story flow endpoints that begin after bag confirmation.
@@ -155,32 +155,14 @@ export class SessionsController {
     summary: '게임 히스토리 조회',
     description: '사용자의 게임 플레이 히스토리 목록을 반환합니다.',
   })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: '페이지 번호',
-    example: 1,
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: '페이지 당 개수 (기본값: 100 - 전체 조회에 가깝게 설정됨)',
-    example: 100,
-  })
-  @ApiResponse({
-    status: 200,
-    description: '게임 히스토리 목록',
-    type: HistoryResponseDto,
-  })
   getHistory(
     @Req() req: Request,
-    @Query('page') page: number = 1,
-    @Query('limit') limit: number = 100,
+    @Query() query: PaginationQueryDto,
   ): Promise<HistoryResponseDto> {
     return this.sessionsService.getHistory(
       Number((req.user as { id: string }).id),
-      Number(page),
-      Number(limit),
+      query.page,
+      query.limit,
     );
   }
 }

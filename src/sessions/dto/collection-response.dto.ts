@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class EndingCollectionItemDto {
   @ApiProperty({ description: '엔딩 ID', example: 1 })
@@ -7,11 +7,12 @@ export class EndingCollectionItemDto {
   @ApiProperty({ description: '엔딩 제목', example: 'Happy: 사랑과 득근' })
   title: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: '엔딩 이미지 URL (수집되지 않은 경우 null)',
     example: 'https://example.com/image.png',
+    nullable: true,
   })
-  imageUrl?: string | null;
+  imageUrl: string | null;
 
   @ApiProperty({ description: '수집 여부', example: true })
   isCollected: boolean;
