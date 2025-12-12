@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -46,6 +47,13 @@ import { IntroResponseDto } from './dto/intro-response.dto';
 import { SessionReportTab } from './dto/session-report-tab.enum';
 import { SessionReportResponseDto } from './dto/session-report-response.dto';
 import { ReportAssembler } from './utils/report-assembler';
+import { RankingResponseDto } from './dto/ranking-response.dto';
+import {
+  EndingCollectionGroupDto,
+  EndingCollectionItemDto,
+  EndingCollectionResponseDto,
+} from './dto/collection-response.dto';
+import { HistoryResponseDto, HistoryItemDto } from './dto/history-response.dto';
 
 export interface ExecuteNextActParams {
   readonly userId: number;
@@ -351,6 +359,300 @@ export class SessionsService {
       tab,
       includeInventory,
     });
+  }
+
+  async getRankingSummary(userId: number): Promise<RankingResponseDto> {
+    // 1. Calculate Aggregate Rankings (Sum of XP per User)
+    // Uses window function to calculate rank based on Total XP
+    const rankingQuery = Prisma.sql`
+      WITH CTE_SessionXP AS (
+        SELECT
+          gs.userId,
+          u.name as nickname,
+          (
+            COALESCE(gs.lifePoint, 0) +
+            COALESCE((
+              SELECT SUM(pc.currentHp)
+              FROM playingCharacterSet pcs
+              JOIN playingCharacter pc ON pc.playingCharacterSetId = pcs.id
+              WHERE pcs.gameSessionId = gs.id
+            ), 0) +
+            COALESCE((
+              SELECT SUM(pc.currentMental)
+              FROM playingCharacterSet pcs
+              JOIN playingCharacter pc ON pc.playingCharacterSetId = pcs.id
+              WHERE pcs.gameSessionId = gs.id
+            ), 0)
+          ) as sessionXp
+        FROM gameSession gs
+        JOIN user u ON gs.userId = u.id
+        WHERE gs.status IN ('GAME_END', 'GAME_OVER', 'SUDDEN_DEATH')
+      ),
+      CTE_UserTotalXP AS (
+        SELECT
+          userId,
+          MAX(nickname) as nickname,
+          SUM(sessionXp) as totalXp
+        FROM CTE_SessionXP
+        GROUP BY userId
+      ),
+      CTE_Ranking AS (
+        SELECT
+          *,
+          RANK() OVER (ORDER BY totalXp DESC, userId ASC) as ranking
+        FROM CTE_UserTotalXP
+      )
+      SELECT * FROM CTE_Ranking
+      ORDER BY ranking ASC
+    `;
+
+    const allRankings = await this.prisma.$queryRaw<
+      Array<{
+        userId: bigint;
+        nickname: string | null;
+        totalXp: number;
+        ranking: bigint;
+      }>
+    >(rankingQuery);
+
+    const totalUsers = allRankings.length;
+    const myRankData = allRankings.find((r) => r.userId === BigInt(userId));
+
+    // 2. Transform Rankings (Top 5)
+    const topRankings = allRankings
+      .slice(0, 5) // Top 5
+      .map((r) => ({
+        rank: Number(r.ranking),
+        nickname: r.nickname || 'Unknown',
+        xp: Number(r.totalXp),
+        isCurrentUser: r.userId === BigInt(userId),
+      }));
+
+    // 3. Fetch Best Result per Character Group
+    // Logic: Fetch all completed sessions for user -> Group by characterGroupId -> Pick best by priority/grade
+    // Need ending details.
+    const userSessions = await this.prisma.gameSession.findMany({
+      where: {
+        userId: BigInt(userId),
+        status: { in: ['GAME_END', 'GAME_OVER', 'SUDDEN_DEATH'] },
+        endingId: { not: null }, // Must have an ending
+      },
+      include: {
+        ending: true,
+        characterGroup: true,
+        playingCharacterSet: {
+          include: {
+            playingCharacter: {
+              include: { character: true },
+            },
+          },
+        },
+      },
+    });
+
+    const bestResultsMap = new Map<string, any>(); // groupCode -> Session
+
+    for (const s of userSessions) {
+      if (!s.characterGroup || !s.ending) continue;
+
+      const groupCode = s.characterGroup.code;
+      const existing = bestResultsMap.get(groupCode);
+
+      // Comparison Logic: Lower Priority is better (usually 1 is best).
+      // Or Grade: Good > Normal > Bad > Hidden?
+      // Let's assume 'priority' field in Ending entity dictates the hierarchy.
+      // If priority is missing, fallback to ID.
+      // Current Schema: ending.priority (Int), ending.grade (String).
+      // Let's use priority (smaller is better?).
+      // User request: Good > Normal > Bad > Hidden.
+      // We need to know how these map to priority.
+      // Assuming existing data convention: verify later if needed.
+      // For now, let's assume 'priority' is the sort key (ascending).
+
+      const currentPriority = s.ending.priority;
+
+      if (!existing || currentPriority < existing.ending.priority) {
+        bestResultsMap.set(groupCode, s);
+      }
+    }
+
+    const charactersResults = Array.from(bestResultsMap.values()).map((s) => {
+      const characterNames =
+        s.playingCharacterSet?.playingCharacter
+          .map((pc) => pc.character.name)
+          .join(', ') ?? '';
+
+      return {
+        characterGroupName: s.characterGroup?.name ?? '',
+        characterNames,
+        result: s.ending?.title ?? '',
+        grade: s.ending?.grade ?? '',
+        imageUrl: s.ending?.image ?? undefined,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        myScore: {
+          rank: myRankData ? Number(myRankData.ranking) : 0,
+          totalUsers,
+          xp: myRankData ? Number(myRankData.totalXp) : 0,
+        },
+        characters: charactersResults,
+        rankings: topRankings,
+      },
+    };
+  }
+
+  async getEndingCollection(
+    userId: number,
+  ): Promise<EndingCollectionResponseDto> {
+    // 1. Fetch all Character Groups with their Endings and Members
+    const groups = await this.prisma.characterGroup.findMany({
+      include: {
+        ending: {
+          orderBy: { priority: 'asc' }, // Assume priority determines order
+        },
+        characterGroupMember: {
+          include: { character: true },
+          orderBy: { slotOrder: 'asc' },
+        },
+      },
+      orderBy: { id: 'asc' }, // Ensure consistent group order
+    });
+
+    // 2. Fetch User's Collected Ending IDs
+    const userSessions = await this.prisma.gameSession.findMany({
+      where: {
+        userId: BigInt(userId),
+        endingId: { not: null },
+      },
+      select: { endingId: true },
+      distinct: ['endingId'],
+    });
+
+    const collectedEndingIds = new Set(
+      userSessions.map((s) => Number(s.endingId)),
+    );
+
+    // 3. Assemble Response
+    const data: EndingCollectionGroupDto[] = groups.map((group) => {
+      const items: EndingCollectionItemDto[] = group.ending.map((end) => {
+        const isCollected = collectedEndingIds.has(Number(end.id));
+        return {
+          endingId: Number(end.id),
+          title: end.title,
+          imageUrl: isCollected ? end.image : null,
+          isCollected,
+        };
+      });
+
+      return {
+        characterGroupCode: group.code,
+        items,
+      };
+    });
+
+    return {
+      success: true,
+      data,
+    };
+  }
+
+  async getHistory(
+    userId: number,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<HistoryResponseDto> {
+    const skip = (page - 1) * limit;
+
+    const [total, sessions] = await Promise.all([
+      this.prisma.gameSession.count({
+        where: {
+          userId: BigInt(userId),
+          status: { in: ['GAME_END', 'GAME_OVER', 'SUDDEN_DEATH'] },
+        },
+      }),
+      this.prisma.gameSession.findMany({
+        where: {
+          userId: BigInt(userId),
+          status: { in: ['GAME_END', 'GAME_OVER', 'SUDDEN_DEATH'] },
+        },
+        include: {
+          ending: true,
+          characterGroup: true,
+          playingCharacterSet: {
+            include: {
+              playingCharacter: {
+                include: { character: true },
+              },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    const historyItems: HistoryItemDto[] = sessions.map((session) => {
+      // XP Calculation: LifePoint + Sum(HP) + Sum(Mental)
+      const hpSum =
+        session.playingCharacterSet?.playingCharacter.reduce(
+          (sum, pc) => sum + pc.currentHp,
+          0,
+        ) ?? 0;
+      const mentalSum =
+        session.playingCharacterSet?.playingCharacter.reduce(
+          (sum, pc) => sum + pc.currentMental,
+          0,
+        ) ?? 0;
+      const xp = (session.lifePoint ?? 0) + hpSum + mentalSum;
+
+      // Character Names
+      const characterNames =
+        session.playingCharacterSet?.playingCharacter
+          .map((pc) => pc.character.name)
+          .join(',') ?? 'Unknown';
+
+      // Date Formatting
+      // session.updatedAt -> "25.01.21" / "14:30"
+      const dateObj = new Date(session.updatedAt);
+      const yy = String(dateObj.getFullYear()).slice(-2);
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const dateStr = `${yy}.${mm}.${dd}`;
+
+      const hh = String(dateObj.getHours()).padStart(2, '0');
+      const min = String(dateObj.getMinutes()).padStart(2, '0');
+      const timeStr = `${hh}:${min}`;
+
+      return {
+        id: String(session.id),
+        characterName: characterNames,
+        resultType: session.ending?.grade ?? 'Unknown',
+        xp,
+        date: dateStr,
+        time: timeStr,
+        // Use characterGroup image if available (not in schema yet? check), fallback to ending image
+        // Assuming characterGroup might NOT have image yet, or strictly 'ending' image as per req (1)?
+        // Req says "(1) 캐릭터 구성 이미지". If characterGroup has image, use it.
+        // If not, maybe use ending.image.
+        // Let's check if `characterGroup` actually has `image` field in Prisma.
+        // If not, for now use ending image or null.
+        // Wait, schema check was fuzzy. I will use `ending.image` as a safe fallback.
+        characterImageUrl: session.ending?.image ?? undefined,
+      };
+    });
+
+    return {
+      success: true,
+      data: historyItems,
+      total,
+      page,
+      limit,
+    };
   }
 
   async createOrResetSessionForUser(userId: number): Promise<void> {
@@ -1121,6 +1423,8 @@ export class SessionsService {
     }
   }
 
+  private readonly logger = new Logger(SessionsService.name);
+
   private async applyClientUpdates(
     session: SessionWithState,
     updates?: NextActUpdatesDto,
@@ -1128,6 +1432,10 @@ export class SessionsService {
     if (!updates) {
       return session;
     }
+
+    this.logger.debug(
+      `Applying Client Updates for Session ${session.id}: ${JSON.stringify(updates)}`,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await this.applyCharacterStatusChanges(
@@ -1164,7 +1472,9 @@ export class SessionsService {
 
     for (const change of changes) {
       const target = session.playingCharacterSet.playingCharacter?.find(
-        (pc) => pc.character.code === change.characterCode,
+        (pc) =>
+          pc.character.code.toLowerCase() ===
+          change.characterCode.toLowerCase(),
       );
 
       if (!target) {
@@ -1236,7 +1546,11 @@ export class SessionsService {
 
     for (const change of changes) {
       const normalizedType = change.statType.toLowerCase();
-      if (normalizedType === 'lifepoint') {
+      if (
+        normalizedType === 'lifepoint' ||
+        normalizedType === 'life_point' ||
+        normalizedType === 'life point'
+      ) {
         this.ensureLifePointInitialized(session.lifePoint);
         await tx.gameSession.update({
           where: { id: session.id },

@@ -6,6 +6,7 @@ import {
   Post,
   Req,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
 import { NextActRequestDto } from './dto/next-act-request.dto';
@@ -24,6 +25,10 @@ import { IntroResponseDto } from './dto/intro-response.dto';
 import { SessionChoiceOutcomeDto } from './dto/session-choice-outcome.dto';
 import { SessionReportResponseDto } from './dto/session-report-response.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { RankingResponseDto } from './dto/ranking-response.dto';
+import { EndingCollectionResponseDto } from './dto/collection-response.dto';
+import { HistoryResponseDto } from './dto/history-response.dto';
+import { PaginationQueryDto } from './dto/pagination-query.dto';
 
 /**
  * SessionsController handles the story flow endpoints that begin after bag confirmation.
@@ -102,5 +107,62 @@ export class SessionsController {
       userId: Number((req.user as { id: string }).id),
       sessionId: Number(sessionId),
     });
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('ranking/summary')
+  @ApiOperation({
+    summary: '랭킹 및 결과 요약 조회',
+    description:
+      '사용자의 누적 랭킹 정보와 캐릭터 그룹별 최고 기록을 반환합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '랭킹 및 결과 요약',
+    type: RankingResponseDto,
+  })
+  getRankingSummary(@Req() req: Request): Promise<RankingResponseDto> {
+    return this.sessionsService.getRankingSummary(
+      Number((req.user as { id: string }).id),
+    );
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('collections')
+  @ApiOperation({
+    summary: '엔딩 수집 현황 조회',
+    description: '캐릭터 그룹별 엔딩 수집 리스트를 반환합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '엔딩 수집 리스트',
+    type: EndingCollectionResponseDto,
+  })
+  getEndingCollection(
+    @Req() req: Request,
+  ): Promise<EndingCollectionResponseDto> {
+    return this.sessionsService.getEndingCollection(
+      Number((req.user as { id: string }).id),
+    );
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('JWT-auth')
+  @Get('history')
+  @ApiOperation({
+    summary: '게임 히스토리 조회',
+    description: '사용자의 게임 플레이 히스토리 목록을 반환합니다.',
+  })
+  getHistory(
+    @Req() req: Request,
+    @Query() query: PaginationQueryDto,
+  ): Promise<HistoryResponseDto> {
+    return this.sessionsService.getHistory(
+      Number((req.user as { id: string }).id),
+      query.page,
+      query.limit,
+    );
   }
 }
