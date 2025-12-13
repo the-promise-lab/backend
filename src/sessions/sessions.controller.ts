@@ -155,6 +155,11 @@ export class SessionsController {
     summary: '게임 히스토리 조회',
     description: '사용자의 게임 플레이 히스토리 목록을 반환합니다.',
   })
+  @ApiResponse({
+    status: 200,
+    description: '게임 히스토리 목록',
+    type: HistoryResponseDto,
+  })
   getHistory(
     @Req() req: Request,
     @Query() query: PaginationQueryDto,
