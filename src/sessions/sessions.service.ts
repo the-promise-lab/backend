@@ -1613,20 +1613,30 @@ export class SessionsService {
           });
         }
       } else {
-        await tx.gameSessionInventory.upsert({
-          where: {
-            sessionId_itemId: {
+        const upsertInventory = async (): Promise<void> => {
+          await tx.gameSessionInventory.upsert({
+            where: {
+              sessionId_itemId: {
+                sessionId: session.id,
+                itemId,
+              },
+            },
+            update: { quantity: newQuantity },
+            create: {
               sessionId: session.id,
               itemId,
+              quantity: newQuantity,
             },
-          },
-          update: { quantity: newQuantity },
-          create: {
-            sessionId: session.id,
-            itemId,
-            quantity: newQuantity,
-          },
-        });
+          });
+        };
+        try {
+          await upsertInventory();
+        } catch (err) {
+          if (!this.isGameSessionInventoryUniqueConstraintError(err)) {
+            throw err;
+          }
+          await upsertInventory();
+        }
       }
 
       if (actualDelta !== 0) {
@@ -1652,6 +1662,20 @@ export class SessionsService {
           (session.bagCapacityUsed ?? 0) + capacityCost * change.quantityChange;
       }
     }
+  }
+
+  private isGameSessionInventoryUniqueConstraintError(err: unknown): boolean {
+    if (!(err instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+    if (err.code !== 'P2002') {
+      return false;
+    }
+    const meta = err.meta as Record<string, unknown> | undefined;
+    if (!meta) {
+      return false;
+    }
+    return meta['modelName'] === 'gameSessionInventory';
   }
 
   private hasSuddenDeath(session: SessionWithState): boolean {
