@@ -146,6 +146,7 @@ async function bootstrap() {
     logger,
     tunnel: localSshTunnel,
   });
+  const isLocal: boolean = process.env.IS_LOCAL === 'true';
 
   logger.log(
     `[Env Check] DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/\/.*:.*@/, '//****:****@') : 'Undefined'}`,
@@ -154,7 +155,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
 
-  if (!swaggerId || !swaggerPassword) {
+  if (!isLocal && (!swaggerId || !swaggerPassword)) {
     logger.error(
       'SWAGGER_ID and SWAGGER_PW environment variables are not defined.',
     );
@@ -163,10 +164,10 @@ async function bootstrap() {
     );
   }
 
-  const swaggerBasicAuthMiddleware = createSwaggerBasicAuthMiddleware(
-    swaggerId,
-    swaggerPassword,
-  );
+  const swaggerBasicAuthMiddleware =
+    isLocal || !swaggerId || !swaggerPassword
+      ? null
+      : createSwaggerBasicAuthMiddleware(swaggerId, swaggerPassword);
 
   // Correctly set 'trust proxy' by getting the underlying Express adapter instance
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
@@ -267,7 +268,9 @@ async function bootstrap() {
     )
     .build();
 
-  app.use(['/api/docs', '/api/docs-json'], swaggerBasicAuthMiddleware);
+  if (swaggerBasicAuthMiddleware) {
+    app.use(['/api/docs', '/api/docs-json'], swaggerBasicAuthMiddleware);
+  }
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
