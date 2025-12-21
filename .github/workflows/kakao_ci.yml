@@ -139,8 +139,12 @@ jobs:
           platforms: linux/amd64
           build-args: |
             DATABASE_URL=${{ secrets.KAKAO_DATABASE_URL }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=thepromise2025/thepromise:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=thepromise2025/thepromise:buildcache,mode=max
 
       - name: Test Docker build (PR only)
         if: github.event_name == 'pull_request'

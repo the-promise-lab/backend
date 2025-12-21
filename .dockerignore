@@ -3,6 +3,9 @@ npm-debug.log
 dist
 .env
 .env.local
+.env.production
+.env.development
+.env.test
 .env.development.local
 .env.test.local
 .env.production.local
@@ -16,3 +19,4 @@ test
 .DS_Store
 .vscode
 .idea
+*.pem
