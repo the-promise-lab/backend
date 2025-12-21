@@ -14,7 +14,7 @@ import { SessionsModule } from './sessions/sessions.module';
     SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: ['.env'],
     }),
     AuthModule,
     GameModule,
