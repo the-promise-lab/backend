@@ -254,8 +254,53 @@ jobs:
             # 새 컨테이너 이름 변경
             docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
 
-            # 사용하지 않는 이미지 정리
-            echo "🧹 사용하지 않는 Docker 이미지 정리 중..."
+            # 최근 이미지 3개만 유지 (+ 현재 실행 중인 이미지 보존)
+            echo "🧹 Docker 이미지 정리: 최근 3개만 유지 (thepromise2025/thepromise)"
+            # NOTE: docker inspect returns a full content-addressable ID (e.g., sha256:...).
+            # Use full IDs everywhere to avoid short-ID mismatch.
+            CURRENT_IMAGE_ID="$(docker inspect -f '{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+            if [ -n "$CURRENT_IMAGE_ID" ]; then
+              echo "🛡️ 현재 실행중 이미지 보존: $CURRENT_IMAGE_ID"
+            else
+              echo "⚠️ 현재 실행중 이미지 ID를 확인하지 못했습니다. (계속 진행)"
+            fi
+
+            # Use --no-trunc to keep full IDs (sha256:...) so comparison with CURRENT_IMAGE_ID is reliable.
+            # Sort explicitly by CreatedAt (newest first) to avoid relying on CLI output ordering.
+            mapfile -t ALL_IMAGE_IDS < <(
+              docker images thepromise2025/thepromise --no-trunc --format '{{.CreatedAt}}\t{{.ID}}' |
+              sort -r |
+              awk -F'\t' '!seen[$2]++ { print $2 }'
+            )
+            mapfile -t KEEP_IMAGE_IDS < <(printf "%s\n" "${ALL_IMAGE_IDS[@]}" | head -n 3)
+
+            if [ "${#ALL_IMAGE_IDS[@]}" -le 3 ]; then
+              echo "ℹ️ 유지 대상이 이미 3개 이하입니다. (총 ${#ALL_IMAGE_IDS[@]}개)"
+            else
+              echo "✅ 유지할 이미지 ID(최대 3개):"
+              printf " - %s\n" "${KEEP_IMAGE_IDS[@]}"
+
+              for IMAGE_ID in "${ALL_IMAGE_IDS[@]}"; do
+                SHOULD_KEEP=false
+                for KEEP_ID in "${KEEP_IMAGE_IDS[@]}"; do
+                  if [ "$IMAGE_ID" = "$KEEP_ID" ]; then
+                    SHOULD_KEEP=true
+                    break
+                  fi
+                done
+                if [ -n "$CURRENT_IMAGE_ID" ] && [ "$IMAGE_ID" = "$CURRENT_IMAGE_ID" ]; then
+                  SHOULD_KEEP=true
+                fi
+                if [ "$SHOULD_KEEP" = true ]; then
+                  continue
+                fi
+                echo "🗑️ 오래된 이미지 제거: $IMAGE_ID"
+                docker rmi "$IMAGE_ID" 2>/dev/null || true
+              done
+            fi
+
+            # dangling 이미지 정리
+            echo "🧹 dangling 이미지 정리 중..."
             docker image prune -f
 
             # 배포 완료 정보 출력
