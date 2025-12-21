@@ -12,6 +12,19 @@ import * as session from 'express-session'; // Import express-session
 import * as MySQLStore from 'express-mysql-session';
 import { URL } from 'url';
 import { Request, Response, NextFunction } from 'express';
+import { config as loadDotenv } from 'dotenv';
+import { existsSync } from 'node:fs';
+import { LocalSshTunnel } from './common/utils/local-ssh-tunnel';
+import { rewriteDatabaseUrlForLocalTunnel } from './common/utils/local-database-url';
+
+function loadEnvFiles(): void {
+  const envPath: string = '.env';
+  if (existsSync(envPath)) {
+    loadDotenv({ path: envPath });
+  }
+}
+
+loadEnvFiles();
 
 const swaggerId = process.env.SWAGGER_ID;
 const swaggerPassword = process.env.SWAGGER_PW;
@@ -69,16 +82,80 @@ function createSwaggerBasicAuthMiddleware(
   return Number(this);
 };
 
+async function ensureLocalSshTunnelAndRewriteDatabaseUrl(params: {
+  readonly logger: Logger;
+  readonly tunnel: LocalSshTunnel;
+}): Promise<void> {
+  const isLocal: boolean = process.env.IS_LOCAL === 'true';
+  if (!isLocal) {
+    return;
+  }
+  const originalDatabaseUrl: string | undefined = process.env.DATABASE_URL;
+  if (!originalDatabaseUrl) {
+    throw new Error('IS_LOCAL=true requires DATABASE_URL to be defined.');
+  }
+  const bastionHost: string = process.env.SSH_BASTION_HOST || '210.109.54.7';
+  const bastionPort: number = process.env.SSH_BASTION_PORT
+    ? Number(process.env.SSH_BASTION_PORT)
+    : 22;
+  const bastionUsername: string = process.env.SSH_BASTION_USERNAME || 'ubuntu';
+  const privateKeyPath: string | undefined = process.env.SSH_PRIVATE_KEY_PATH;
+  if (!privateKeyPath) {
+    throw new Error(
+      'IS_LOCAL=true requires SSH_PRIVATE_KEY_PATH to be defined (absolute path recommended).',
+    );
+  }
+  const localPort: number = process.env.SSH_LOCAL_PORT
+    ? Number(process.env.SSH_LOCAL_PORT)
+    : 13306;
+  const { rewrittenDatabaseUrl, remoteHost, remotePort } =
+    rewriteDatabaseUrlForLocalTunnel({
+      originalDatabaseUrl,
+      localHost: '127.0.0.1',
+      localPort,
+    });
+  params.logger.log(
+    `[Local SSH Tunnel] Starting tunnel via ${bastionUsername}@${bastionHost}:${bastionPort} to ${remoteHost}:${remotePort} (local: 127.0.0.1:${localPort})`,
+  );
+  await params.tunnel.startTunnel({
+    bastionHost,
+    bastionPort,
+    bastionUsername,
+    privateKeyPath,
+    localPort,
+    remoteHost,
+    remotePort,
+    connectTimeoutMs: 15_000,
+    readyTimeoutMs: 15_000,
+  });
+  process.env.DATABASE_URL = rewrittenDatabaseUrl;
+  params.logger.log(
+    '[Local SSH Tunnel] DATABASE_URL rewritten for local tunnel.',
+  );
+}
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap'); // Create a logger instance
+  const localSshTunnel = new LocalSshTunnel();
+  const stopLocalTunnel = (): void => {
+    void localSshTunnel.stopTunnel();
+  };
+  process.once('SIGINT', stopLocalTunnel);
+  process.once('SIGTERM', stopLocalTunnel);
+  await ensureLocalSshTunnelAndRewriteDatabaseUrl({
+    logger,
+    tunnel: localSshTunnel,
+  });
+  const isLocal: boolean = process.env.IS_LOCAL === 'true';
 
   logger.log(
     `[Env Check] DATABASE_URL: ${process.env.DATABASE_URL ? process.env.DATABASE_URL.replace(/\/\/.*:.*@/, '//****:****@') : 'Undefined'}`,
   );
 
   const app = await NestFactory.create(AppModule);
+  app.enableShutdownHooks();
 
-  if (!swaggerId || !swaggerPassword) {
+  if (!isLocal && (!swaggerId || !swaggerPassword)) {
     logger.error(
       'SWAGGER_ID and SWAGGER_PW environment variables are not defined.',
     );
@@ -87,10 +164,10 @@ async function bootstrap() {
     );
   }
 
-  const swaggerBasicAuthMiddleware = createSwaggerBasicAuthMiddleware(
-    swaggerId,
-    swaggerPassword,
-  );
+  const swaggerBasicAuthMiddleware =
+    isLocal || !swaggerId || !swaggerPassword
+      ? null
+      : createSwaggerBasicAuthMiddleware(swaggerId, swaggerPassword);
 
   // Correctly set 'trust proxy' by getting the underlying Express adapter instance
   (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
@@ -191,7 +268,9 @@ async function bootstrap() {
     )
     .build();
 
-  app.use(['/api/docs', '/api/docs-json'], swaggerBasicAuthMiddleware);
+  if (swaggerBasicAuthMiddleware) {
+    app.use(['/api/docs', '/api/docs-json'], swaggerBasicAuthMiddleware);
+  }
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
