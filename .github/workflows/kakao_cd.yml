@@ -31,7 +31,12 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    env:
+      INFISICAL_SERVICE_TOKEN: ${{ secrets.INFISICAL_SERVICE_TOKEN }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Determine image tag
         id: determine_image_tag
         uses: actions/github-script@v7
@@ -63,72 +68,70 @@ jobs:
               core.exportVariable('IMAGE_TAG', 'latest');
             }
 
+      - name: Install Infisical CLI
+        run: |
+          set -Eeuo pipefail
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update
+          sudo apt-get install -y infisical
+
+      - name: Load secrets from Infisical
+        run: |
+          set -Eeuo pipefail
+          infisical export \
+            --env=prod \
+            --token="$INFISICAL_SERVICE_TOKEN" \
+            --format=dotenv \
+            --output-file=/tmp/infisical.env \
+            --silent
+          cat /tmp/infisical.env >> "$GITHUB_ENV"
+          rm -f /tmp/infisical.env
+
       - name: Deploy to Kakao Cloud
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          ENV_FILE: ${{ secrets.KAKAO_ENV_FILE }}
         with:
-          host: ${{ secrets.KAKAO_CLOUD_HOST }}
-          username: ${{ secrets.KAKAO_CLOUD_USER }}
-          key: ${{ secrets.KAKAO_CLOUD_SSH_KEY }}
+          host: ${{ env.KAKAO_CLOUD_HOST }}
+          username: ${{ env.KAKAO_CLOUD_USER }}
+          key: ${{ env.KAKAO_CLOUD_SSH_KEY }}
           port: 22
           timeout: 500s
           command_timeout: 500s
-          envs: ENV_FILE,IMAGE_TAG
+          envs: KCR_REGISTRY,KCR_IMAGE,KAKAO_ACCESS_KEY,KAKAO_SECRET_KEY,INFISICAL_SERVICE_TOKEN,IMAGE_TAG
           script: |
             set -Eeuo pipefail
             IFS=$'\n\t'
             trap 'code=$?; echo "❗ 배포 스크립트 오류(code=$code)"; exit $code' ERR
 
-            echo "🚀 배포 시작: thepromise2025/thepromise:$IMAGE_TAG"
+            echo "🚀 배포 시작: ${KCR_IMAGE}:$IMAGE_TAG"
 
-            # Docker가 설치되어 있는지 확인
+            # prerequisites
             if ! command -v docker &> /dev/null; then
               echo "❌ Docker가 설치되어 있지 않습니다."
               exit 1
             fi
 
-            # curl 확인 (헬스체크에 필요)
             if ! command -v curl &> /dev/null; then
               echo "❌ curl이 설치되어 있지 않습니다."
               exit 1
             fi
 
-            # 최신 이미지 Pull
-            echo "📦 Docker 이미지 다운로드 중..."
-            echo "🎯 대상 이미지: thepromise2025/thepromise:$IMAGE_TAG"
-
-            # Docker Hub 연결 테스트
-            echo "🌐 Docker Hub 연결 테스트..."
-            docker search thepromise2025 --limit 1 || echo "⚠️ Docker Hub 검색 실패"
-
-            # 실제 pull 실행
-            echo "⬇️ 이미지 다운로드 시작..."
-            if docker pull thepromise2025/thepromise:$IMAGE_TAG; then
-              echo "✅ 이미지 다운로드 성공!"
+            # login + pull
+            docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password "${KAKAO_SECRET_KEY}"
+            if docker pull "${KCR_IMAGE}:$IMAGE_TAG"; then
+              echo "✅ 이미지 pull 성공: ${KCR_IMAGE}:$IMAGE_TAG"
             else
               echo "❌ 이미지 다운로드 실패!"
-              echo "🔍 현재 이미지 목록:"
               docker images
-              echo "🔍 Docker Hub 접근 테스트:"
-              curl -I https://hub.docker.com/ || echo "Docker Hub 접근 불가"
               exit 1
             fi
 
-            # 다운로드된 이미지 확인
-            echo "📋 다운로드된 이미지 확인:"
-            docker images thepromise2025/thepromise
-
             # 기존 컨테이너 확인 (무중단 배포를 위해 아직 제거하지 않음)
             CONTAINER_NAME="thepromise-backend"
-            echo "🔍 기존 컨테이너 확인 중..."
 
             # 메인 컨테이너 확인 (제거하지 않고 정보만 수집)
             OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
             if [ -n "$OLD_CONTAINER_ID" ]; then
               echo "🔄 기존 메인 컨테이너 발견: $OLD_CONTAINER_ID (유지 중 - 무중단 배포)"
-              echo "📊 기존 컨테이너 상태:"
-              docker ps -f id=$OLD_CONTAINER_ID --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
             else
               echo "ℹ️ 기존 메인 컨테이너가 없습니다 (첫 배포)"
             fi
@@ -167,9 +170,11 @@ jobs:
 
             echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
 
-            # .env 파일 생성
-            echo "📝 환경 변수 파일 생성 중..."
-            echo "$ENV_FILE" > /tmp/.env
+            # env-file for container (token only; project id from .infisical.json in image)
+            cat > /tmp/.env << EOF
+            INFISICAL_SERVICE_TOKEN=${INFISICAL_SERVICE_TOKEN}
+            INFISICAL_ENV=prod
+            EOF
 
             # 새 컨테이너 실행 (임시 이름으로)
             echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
@@ -179,17 +184,13 @@ jobs:
               --restart unless-stopped \
               --env-file /tmp/.env \
               -e NODE_ENV=production \
-              thepromise2025/thepromise:$IMAGE_TAG)
+              "${KCR_IMAGE}:$IMAGE_TAG")
 
             # 환경 변수 파일 정리 (보안)
             rm -f /tmp/.env
 
             echo "⏳ 새 컨테이너 헬스체크 대기 중..."
             echo "🔍 컨테이너 ID: $NEW_CONTAINER_ID"
-
-            # 컨테이너 상태 먼저 확인
-            echo "📊 컨테이너 상태 확인 중..."
-            docker ps -f id=$NEW_CONTAINER_ID --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
 
             # 헬스체크 (최대 60초 대기)
             HEALTH_CHECK_ATTEMPTS=0
@@ -199,7 +200,6 @@ jobs:
               # 컨테이너가 실행 중인지 먼저 확인
               if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID" 2>/dev/null)" != "true" ]; then
                 echo "❌ 컨테이너가 실행되지 않고 있습니다!"
-                docker logs --tail 50 "$NEW_CONTAINER_ID" || true
                 break
               fi
               
@@ -210,13 +210,6 @@ jobs:
               
               HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
               echo "⏳ 헬스체크 시도 $HEALTH_CHECK_ATTEMPTS/$MAX_ATTEMPTS..."
-              
-              # 5번째 시도마다 컨테이너 로그 확인
-              if [ $((HEALTH_CHECK_ATTEMPTS % 5)) -eq 0 ]; then
-                echo "🪵 컨테이너 로그 (최근 10줄):"
-                docker logs --tail 10 "$NEW_CONTAINER_ID" || true
-              fi
-              
               sleep 3
             done
 
@@ -254,59 +247,13 @@ jobs:
             # 새 컨테이너 이름 변경
             docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
 
-            # 최근 이미지 3개만 유지 (+ 현재 실행 중인 이미지 보존)
-            echo "🧹 Docker 이미지 정리: 최근 3개만 유지 (thepromise2025/thepromise)"
-            # NOTE: docker inspect returns a full content-addressable ID (e.g., sha256:...).
-            # Use full IDs everywhere to avoid short-ID mismatch.
-            CURRENT_IMAGE_ID="$(docker inspect -f '{{.Image}}' "$CONTAINER_NAME" 2>/dev/null || true)"
-            if [ -n "$CURRENT_IMAGE_ID" ]; then
-              echo "🛡️ 현재 실행중 이미지 보존: $CURRENT_IMAGE_ID"
-            else
-              echo "⚠️ 현재 실행중 이미지 ID를 확인하지 못했습니다. (계속 진행)"
-            fi
-
-            # Use --no-trunc to keep full IDs (sha256:...) so comparison with CURRENT_IMAGE_ID is reliable.
-            # Sort explicitly by CreatedAt (newest first) to avoid relying on CLI output ordering.
-            mapfile -t ALL_IMAGE_IDS < <(
-              docker images thepromise2025/thepromise --no-trunc --format '{{.CreatedAt}}\t{{.ID}}' |
-              sort -r |
-              awk -F'\t' '!seen[$2]++ { print $2 }'
-            )
-            mapfile -t KEEP_IMAGE_IDS < <(printf "%s\n" "${ALL_IMAGE_IDS[@]}" | head -n 3)
-
-            if [ "${#ALL_IMAGE_IDS[@]}" -le 3 ]; then
-              echo "ℹ️ 유지 대상이 이미 3개 이하입니다. (총 ${#ALL_IMAGE_IDS[@]}개)"
-            else
-              echo "✅ 유지할 이미지 ID(최대 3개):"
-              printf " - %s\n" "${KEEP_IMAGE_IDS[@]}"
-
-              for IMAGE_ID in "${ALL_IMAGE_IDS[@]}"; do
-                SHOULD_KEEP=false
-                for KEEP_ID in "${KEEP_IMAGE_IDS[@]}"; do
-                  if [ "$IMAGE_ID" = "$KEEP_ID" ]; then
-                    SHOULD_KEEP=true
-                    break
-                  fi
-                done
-                if [ -n "$CURRENT_IMAGE_ID" ] && [ "$IMAGE_ID" = "$CURRENT_IMAGE_ID" ]; then
-                  SHOULD_KEEP=true
-                fi
-                if [ "$SHOULD_KEEP" = true ]; then
-                  continue
-                fi
-                echo "🗑️ 오래된 이미지 제거: $IMAGE_ID"
-                docker rmi "$IMAGE_ID" 2>/dev/null || true
-              done
-            fi
-
             # dangling 이미지 정리
-            echo "🧹 dangling 이미지 정리 중..."
             docker image prune -f
 
             # 배포 완료 정보 출력
             echo "🎉 배포 완료!"
             echo "📊 배포 정보:"
-            echo "   - 이미지: thepromise2025/thepromise:$IMAGE_TAG"
+            echo "   - 이미지: ${KCR_IMAGE}:$IMAGE_TAG"
             echo "   - 컨테이너: $NEW_CONTAINER_ID"
             echo "   - 포트: $NEW_PORT (Nginx 통해 80으로 전달)"
             echo "   - 상태: $(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME)"
@@ -320,8 +267,8 @@ jobs:
         run: |
           echo "✅ 배포가 성공적으로 완료되었습니다!"
           echo "🏷️ 배포된 태그: ${IMAGE_TAG:-latest}"
-          echo "🌐 서비스 URL: http://${{ secrets.KAKAO_CLOUD_HOST }} (Nginx 리버스 프록시)"
-          echo "🔍 헬스체크: http://${{ secrets.KAKAO_CLOUD_HOST }}/api/health"
+          echo "🌐 서비스 URL: http://${{ env.KAKAO_CLOUD_HOST }} (Nginx 리버스 프록시)"
+          echo "🔍 헬스체크: http://${{ env.KAKAO_CLOUD_HOST }}/api/health"
 
       - name: Notify deployment failure
         if: failure()

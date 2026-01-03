@@ -45,6 +45,8 @@
   },
   "homepage": "https://github.com/the-promise-lab/backend#readme",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.679.0",
+    "@infisical/sdk": "^4.0.6",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.5",
     "@nestjs/config": "^4.0.2",
@@ -57,7 +59,6 @@
     "@sentry/nestjs": "^10.4.0",
     "@sentry/profiling-node": "^10.4.0",
     "@types/express-session": "^1.18.2",
-    "@aws-sdk/client-s3": "^3.679.0",
     "axios": "^1.11.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
