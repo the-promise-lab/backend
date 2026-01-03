@@ -86,7 +86,6 @@ jobs:
             --silent
           node <<'NODE'
           const fs = require('node:fs');
-          const path = require('node:path');
           const envFile = process.env.GITHUB_ENV;
           if (!envFile) {
             process.exit(0);
@@ -119,13 +118,13 @@ jobs:
           if (!sshKey.trim()) {
             throw new Error('[CD] Required secret is empty: KAKAO_CLOUD_SSH_KEY');
           }
-          const workspaceHostPath = process.env.GITHUB_WORKSPACE || process.cwd();
-          const sshDirectoryHostPath = path.join(workspaceHostPath, '.ssh');
-          fs.mkdirSync(sshDirectoryHostPath, { recursive: true, mode: 0o700 });
-          const sshKeyHostPath = path.join(sshDirectoryHostPath, 'kakao_cloud_ssh_key');
-          fs.writeFileSync(sshKeyHostPath, sshKey.replace(/\r\n/g, '\n'), { encoding: 'utf8', mode: 0o600 });
-          const sshKeyContainerPath = '/github/workspace/.ssh/kakao_cloud_ssh_key';
-          fs.appendFileSync(envFile, `KAKAO_CLOUD_SSH_KEY_PATH=${sshKeyContainerPath}\n`, 'utf8');
+          const sshKeyNormalized = sshKey.replace(/\r\n/g, '\n');
+          const delimiter = `KAKAO_SSH_KEY_${Math.random().toString(16).slice(2)}`;
+          fs.appendFileSync(
+            envFile,
+            `KAKAO_CLOUD_SSH_KEY<<${delimiter}\n${sshKeyNormalized}\n${delimiter}\n`,
+            'utf8',
+          );
           NODE
           rm -f /tmp/infisical.json
 
@@ -134,7 +133,7 @@ jobs:
         with:
           host: ${{ env.KAKAO_CLOUD_HOST }}
           username: ${{ env.KAKAO_CLOUD_USER }}
-          key_path: ${{ env.KAKAO_CLOUD_SSH_KEY_PATH }}
+          key: ${{ env.KAKAO_CLOUD_SSH_KEY }}
           port: 22
           timeout: 500s
           command_timeout: 500s
