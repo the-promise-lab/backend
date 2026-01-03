@@ -8,6 +8,7 @@ on:
       - completed
     branches:
       - main
+      - fix/security-issue
   workflow_dispatch:
     inputs:
       image_tag:
