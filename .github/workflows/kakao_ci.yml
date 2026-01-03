@@ -24,6 +24,8 @@ permissions:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    env:
+      INFISICAL_SERVICE_TOKEN: ${{ secrets.INFISICAL_SERVICE_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -120,12 +122,34 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub (main branch only)
+      - name: Install Infisical CLI (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -Eeuo pipefail
+          curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+          sudo apt-get update
+          sudo apt-get install -y infisical
+
+      - name: Load secrets from Infisical (main branch only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -Eeuo pipefail
+          infisical export \
+            --env=prod \
+            --token="$INFISICAL_SERVICE_TOKEN" \
+            --format=dotenv \
+            --output-file=/tmp/infisical.env \
+            --silent
+          cat /tmp/infisical.env >> "$GITHUB_ENV"
+          rm -f /tmp/infisical.env
+
+      - name: Login to Kakao Container Registry (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ${{ env.KCR_REGISTRY }}
+          username: ${{ env.KAKAO_ACCESS_KEY }}
+          password: ${{ env.KAKAO_SECRET_KEY }}
 
       - name: Build and push Docker image (main branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -134,17 +158,13 @@ jobs:
           context: .
           push: true
           tags: |
-            thepromise2025/thepromise:latest
-            thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
+            ${{ env.KCR_IMAGE }}:latest
+            ${{ env.KCR_IMAGE }}:v${{ steps.new_version.outputs.new_version }}
           platforms: linux/amd64
-          build-args: |
-            DATABASE_URL=${{ secrets.KAKAO_DATABASE_URL }}
           cache-from: |
             type=gha
-            type=registry,ref=thepromise2025/thepromise:buildcache
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=thepromise2025/thepromise:buildcache,mode=max
 
       - name: Test Docker build (PR only)
         if: github.event_name == 'pull_request'
@@ -186,10 +206,10 @@ jobs:
             ### 📦 Docker 이미지 사용법
             ```bash
             # 최신 버전
-            docker run -p 3000:3000 thepromise2025/thepromise:latest
+            docker run -p 3000:3000 ${{ env.KCR_IMAGE }}:latest
 
             # 특정 버전 (권장)
-            docker run -p 3000:3000 thepromise2025/thepromise:v${{ steps.new_version.outputs.new_version }}
+            docker run -p 3000:3000 ${{ env.KCR_IMAGE }}:v${{ steps.new_version.outputs.new_version }}
             ```
 
             ### 🔗 접속 정보

@@ -14,8 +14,10 @@ import { URL } from 'url';
 import { Request, Response, NextFunction } from 'express';
 import { config as loadDotenv } from 'dotenv';
 import { existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { LocalSshTunnel } from './common/utils/local-ssh-tunnel';
 import { rewriteDatabaseUrlForLocalTunnel } from './common/utils/local-database-url';
+import { InfisicalEnvLoader } from './common/config/infisical/infisical-env-loader';
 
 function loadEnvFiles(): void {
   const envPath: string = '.env';
@@ -25,9 +27,6 @@ function loadEnvFiles(): void {
 }
 
 loadEnvFiles();
-
-const swaggerId = process.env.SWAGGER_ID;
-const swaggerPassword = process.env.SWAGGER_PW;
 
 function createSwaggerBasicAuthMiddleware(
   id: string,
@@ -136,6 +135,7 @@ async function ensureLocalSshTunnelAndRewriteDatabaseUrl(params: {
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap'); // Create a logger instance
+  await loadSecretsFromInfisicalIfConfigured({ logger });
   const localSshTunnel = new LocalSshTunnel();
   const stopLocalTunnel = (): void => {
     void localSshTunnel.stopTunnel();
@@ -154,6 +154,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+
+  const swaggerId: string | undefined = process.env.SWAGGER_ID;
+  const swaggerPassword: string | undefined = process.env.SWAGGER_PW;
 
   if (!isLocal && (!swaggerId || !swaggerPassword)) {
     logger.error(
@@ -287,3 +290,72 @@ async function bootstrap() {
   );
 }
 bootstrap();
+
+async function loadSecretsFromInfisicalIfConfigured(params: {
+  readonly logger: Logger;
+}): Promise<void> {
+  const projectIdFromEnv: string | undefined = process.env.INFISICAL_PROJECT_ID;
+  const siteUrl: string | undefined = process.env.INFISICAL_SITE_URL;
+  const explicitEnv: string | undefined = process.env.INFISICAL_ENV;
+  const isProduction: boolean = process.env.NODE_ENV === 'production';
+  const environment =
+    explicitEnv === 'prod' || explicitEnv === 'dev'
+      ? explicitEnv
+      : isProduction
+        ? 'prod'
+        : 'dev';
+  const loader = new InfisicalEnvLoader();
+  const serviceToken: string | undefined = process.env.INFISICAL_SERVICE_TOKEN;
+  const projectId: string | null =
+    projectIdFromEnv ?? getInfisicalProjectIdFromConfigFile();
+  if (serviceToken && projectId) {
+    const result = await loader.loadAndInjectWithServiceToken({
+      serviceToken,
+      projectId,
+      environment,
+      siteUrl,
+    });
+    params.logger.log(
+      `[Infisical] Loaded ${result.loadedKeys.length} secrets for env="${environment}" (skipped: ${result.skippedKeys.length}).`,
+    );
+    return;
+  }
+  const clientId: string | undefined = process.env.INFISICAL_CLIENT_ID;
+  const clientSecret: string | undefined = process.env.INFISICAL_CLIENT_SECRET;
+  if (!clientId || !clientSecret || !projectId) {
+    return;
+  }
+  const result = await loader.loadAndInject({
+    clientId,
+    clientSecret,
+    projectId,
+    environment,
+    siteUrl,
+  });
+  params.logger.log(
+    `[Infisical] Loaded ${result.loadedKeys.length} secrets for env="${environment}" (skipped: ${result.skippedKeys.length}).`,
+  );
+}
+
+function getInfisicalProjectIdFromConfigFile(): string | null {
+  const configPath = '.infisical.json';
+  if (!existsSync(configPath)) {
+    return null;
+  }
+  try {
+    const raw: string = readFileSync(configPath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'workspaceId' in parsed &&
+      typeof (parsed as { readonly workspaceId?: unknown }).workspaceId ===
+        'string'
+    ) {
+      return (parsed as { readonly workspaceId: string }).workspaceId;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

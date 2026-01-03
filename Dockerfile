@@ -19,12 +19,11 @@ RUN npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
-# Set DATABASE_URL as an argument and environment variable                                                                                         │
-ARG DATABASE_URL                                                                                                                                   │
-ENV DATABASE_URL=${DATABASE_URL}   
 
 # Generate Prisma client
-RUN npx prisma generate
+# Prisma CLI needs DATABASE_URL to be defined when reading schema.prisma (env("DATABASE_URL")).
+# Use a dummy value during build to avoid injecting real secrets.
+RUN DATABASE_URL="mysql://user:password@127.0.0.1:3306/database" npx prisma generate
 
 # Build the application
 RUN npm run build
@@ -51,6 +50,7 @@ RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/.infisical.json ./.infisical.json
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
