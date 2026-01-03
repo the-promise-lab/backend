@@ -137,11 +137,29 @@ jobs:
           infisical export \
             --env=prod \
             --token="$INFISICAL_SERVICE_TOKEN" \
-            --format=dotenv \
-            --output-file=/tmp/infisical.env \
+            --format=json \
+            --output-file=/tmp/infisical.json \
             --silent
-          cat /tmp/infisical.env >> "$GITHUB_ENV"
-          rm -f /tmp/infisical.env
+          node <<'NODE'
+          const fs = require('node:fs');
+          const envFile = process.env.GITHUB_ENV;
+          if (!envFile) {
+            process.exit(0);
+          }
+          const entries = JSON.parse(fs.readFileSync('/tmp/infisical.json', 'utf8'));
+          for (const entry of entries) {
+            const key = String(entry.key || '').trim();
+            if (!key) continue;
+            const value = String(entry.value ?? '');
+            if (value.includes('\n') || value.includes('\r')) {
+              const delimiter = `EOF_${key}_${Date.now()}`;
+              fs.appendFileSync(envFile, `${key}<<${delimiter}\n${value}\n${delimiter}\n`, 'utf8');
+            } else {
+              fs.appendFileSync(envFile, `${key}=${value.replace(/\r?\n/g, '')}\n`, 'utf8');
+            }
+          }
+          NODE
+          rm -f /tmp/infisical.json
 
       - name: Login to Kakao Container Registry (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
