@@ -147,27 +147,30 @@ jobs:
             process.exit(0);
           }
           const entries = JSON.parse(fs.readFileSync('/tmp/infisical.json', 'utf8'));
+          const allowedKeys = new Set([
+            'KCR_REGISTRY',
+            'KCR_IMAGE',
+            'KAKAO_ACCESS_KEY',
+            'KAKAO_SECRET_KEY',
+          ]);
           for (const entry of entries) {
             const key = String(entry.key || '').trim();
-            if (!key) continue;
-            const value = String(entry.value ?? '');
-            if (value.includes('\n') || value.includes('\r')) {
-              const delimiter = `EOF_${key}_${Date.now()}`;
-              fs.appendFileSync(envFile, `${key}<<${delimiter}\n${value}\n${delimiter}\n`, 'utf8');
-            } else {
-              fs.appendFileSync(envFile, `${key}=${value.replace(/\r?\n/g, '')}\n`, 'utf8');
+            if (!allowedKeys.has(key)) continue;
+            const value = String(entry.value ?? '').trim();
+            if (!value) {
+              throw new Error(`[CI] Required secret is empty: ${key}`);
             }
+            process.stdout.write(`::add-mask::${value}\n`);
+            fs.appendFileSync(envFile, `${key}=${value}\n`, 'utf8');
           }
           NODE
           rm -f /tmp/infisical.json
 
       - name: Login to Kakao Container Registry (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.KCR_REGISTRY }}
-          username: ${{ env.KAKAO_ACCESS_KEY }}
-          password: ${{ env.KAKAO_SECRET_KEY }}
+        run: |
+          set -Eeuo pipefail
+          echo "${KAKAO_SECRET_KEY}" | docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password-stdin
 
       - name: Build and push Docker image (main branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

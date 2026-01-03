@@ -91,17 +91,36 @@ jobs:
             process.exit(0);
           }
           const entries = JSON.parse(fs.readFileSync('/tmp/infisical.json', 'utf8'));
+          const allowedEnvKeys = new Set([
+            'KCR_REGISTRY',
+            'KCR_IMAGE',
+            'KAKAO_ACCESS_KEY',
+            'KAKAO_SECRET_KEY',
+            'KAKAO_CLOUD_HOST',
+            'KAKAO_CLOUD_USER',
+          ]);
+          let sshKey = '';
           for (const entry of entries) {
             const key = String(entry.key || '').trim();
-            if (!key) continue;
             const value = String(entry.value ?? '');
-            if (value.includes('\n') || value.includes('\r')) {
-              const delimiter = `EOF_${key}_${Date.now()}`;
-              fs.appendFileSync(envFile, `${key}<<${delimiter}\n${value}\n${delimiter}\n`, 'utf8');
-            } else {
-              fs.appendFileSync(envFile, `${key}=${value.replace(/\r?\n/g, '')}\n`, 'utf8');
+            if (key === 'KAKAO_CLOUD_SSH_KEY') {
+              sshKey = value;
+              continue;
             }
+            if (!allowedEnvKeys.has(key)) continue;
+            const trimmedValue = value.trim();
+            if (!trimmedValue) {
+              throw new Error(`[CD] Required secret is empty: ${key}`);
+            }
+            process.stdout.write(`::add-mask::${trimmedValue}\n`);
+            fs.appendFileSync(envFile, `${key}=${trimmedValue}\n`, 'utf8');
           }
+          if (!sshKey.trim()) {
+            throw new Error('[CD] Required secret is empty: KAKAO_CLOUD_SSH_KEY');
+          }
+          const sshKeyPath = '/tmp/kakao_cloud_ssh_key';
+          fs.writeFileSync(sshKeyPath, sshKey.replace(/\r\n/g, '\n'), { encoding: 'utf8', mode: 0o600 });
+          fs.appendFileSync(envFile, `KAKAO_CLOUD_SSH_KEY_PATH=${sshKeyPath}\n`, 'utf8');
           NODE
           rm -f /tmp/infisical.json
 
@@ -110,7 +129,7 @@ jobs:
         with:
           host: ${{ env.KAKAO_CLOUD_HOST }}
           username: ${{ env.KAKAO_CLOUD_USER }}
-          key: ${{ env.KAKAO_CLOUD_SSH_KEY }}
+          key_path: ${{ env.KAKAO_CLOUD_SSH_KEY_PATH }}
           port: 22
           timeout: 500s
           command_timeout: 500s
@@ -134,7 +153,7 @@ jobs:
             fi
 
             # login + pull
-            docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password "${KAKAO_SECRET_KEY}"
+            echo "${KAKAO_SECRET_KEY}" | docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password-stdin
             if docker pull "${KCR_IMAGE}:$IMAGE_TAG"; then
               echo "✅ 이미지 pull 성공: ${KCR_IMAGE}:$IMAGE_TAG"
             else
