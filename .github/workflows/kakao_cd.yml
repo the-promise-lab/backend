@@ -119,6 +119,8 @@ jobs:
             throw new Error('[CD] Required secret is empty: KAKAO_CLOUD_SSH_KEY');
           }
           const sshKeyNormalized = sshKey.replace(/\r\n/g, '\n');
+          // SSH 키를 마스킹하여 로그에 노출되지 않도록 함
+          process.stdout.write(`::add-mask::${sshKeyNormalized}\n`);
           const delimiter = `KAKAO_SSH_KEY_${Math.random().toString(16).slice(2)}`;
           fs.appendFileSync(
             envFile,
