@@ -2,12 +2,9 @@ name: Kakao CD
 
 on:
   workflow_run:
-    workflows:
-      - Kakao CI
-    types:
-      - completed
-    branches:
-      - main
+    workflows: [Kakao CI - Build & Release]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -27,295 +24,98 @@ jobs:
   deploy:
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     env:
       INFISICAL_SERVICE_TOKEN: ${{ secrets.INFISICAL_SERVICE_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Determine image tag
-        id: determine_image_tag
+        id: tag
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const eventName = context.eventName;
-            if (eventName === 'workflow_dispatch') {
-              const manualTag = (context.payload.inputs?.image_tag ?? '').trim();
-              const imageTag = manualTag.length > 0 ? manualTag : 'latest';
-              core.info(`Using manual image tag: ${imageTag}`);
-              core.setOutput('image_tag', imageTag);
-              core.exportVariable('IMAGE_TAG', imageTag);
+            if (context.eventName === 'workflow_dispatch') {
+              const tag = (context.payload.inputs?.image_tag ?? '').trim() || 'latest';
+              core.setOutput('value', tag);
               return;
             }
-
             try {
-              const response = await github.rest.repos.getLatestRelease({
+              const { data } = await github.rest.repos.getLatestRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo
               });
-              const latestTag = response.data.tag_name;
-              core.info(`Using latest release tag: ${latestTag}`);
-              core.setOutput('image_tag', latestTag);
-              core.exportVariable('IMAGE_TAG', latestTag);
-            } catch (error) {
-              core.warning(`Failed to fetch latest release: ${error.message}`);
-              core.setOutput('image_tag', 'latest');
-              core.exportVariable('IMAGE_TAG', 'latest');
+              core.setOutput('value', data.tag_name);
+            } catch {
+              core.setOutput('value', 'latest');
             }
 
       - name: Install Infisical CLI
         run: |
-          set -Eeuo pipefail
           curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
-          sudo apt-get update
-          sudo apt-get install -y infisical
+          sudo apt-get update && sudo apt-get install -y infisical
 
       - name: Load secrets from Infisical
         run: |
-          set -Eeuo pipefail
-          infisical export \
-            --env=prod \
-            --token="$INFISICAL_SERVICE_TOKEN" \
-            --format=json \
-            --output-file=/tmp/infisical.json \
-            --silent
-          node <<'NODE'
+          infisical export --env=prod --token="$INFISICAL_SERVICE_TOKEN" --format=json --output-file=/tmp/secrets.json --silent
+          node <<'EOF'
           const fs = require('node:fs');
+          const secrets = JSON.parse(fs.readFileSync('/tmp/secrets.json', 'utf8'));
           const envFile = process.env.GITHUB_ENV;
-          if (!envFile) {
-            process.exit(0);
-          }
-          const entries = JSON.parse(fs.readFileSync('/tmp/infisical.json', 'utf8'));
-          const allowedEnvKeys = new Set([
-            'KCR_REGISTRY',
-            'KCR_IMAGE',
-            'KAKAO_ACCESS_KEY',
-            'KAKAO_SECRET_KEY',
-            'KAKAO_CLOUD_HOST',
-            'KAKAO_CLOUD_USER',
-          ]);
-          let sshKey = '';
-          for (const entry of entries) {
-            const key = String(entry.key || '').trim();
-            const value = String(entry.value ?? '');
-            if (key === 'KAKAO_CLOUD_SSH_KEY') {
-              sshKey = value;
-              continue;
-            }
-            if (!allowedEnvKeys.has(key)) continue;
-            const trimmedValue = value.trim();
-            if (!trimmedValue) {
-              throw new Error(`[CD] Required secret is empty: ${key}`);
-            }
-            process.stdout.write(`::add-mask::${trimmedValue}\n`);
-            fs.appendFileSync(envFile, `${key}=${trimmedValue}\n`, 'utf8');
-          }
-          if (!sshKey.trim()) {
-            throw new Error('[CD] Required secret is empty: KAKAO_CLOUD_SSH_KEY');
-          }
-          const sshKeyNormalized = sshKey.replace(/\r\n/g, '\n');
-          // SSH 키를 마스킹하여 로그에 노출되지 않도록 함
-          process.stdout.write(`::add-mask::${sshKeyNormalized}\n`);
-          const delimiter = `KAKAO_SSH_KEY_${Math.random().toString(16).slice(2)}`;
-          fs.appendFileSync(
-            envFile,
-            `KAKAO_CLOUD_SSH_KEY<<${delimiter}\n${sshKeyNormalized}\n${delimiter}\n`,
-            'utf8',
-          );
-          NODE
-          rm -f /tmp/infisical.json
 
-      - name: Deploy to Kakao Cloud
+          const keys = ['KCR_REGISTRY', 'KCR_IMAGE', 'KAKAO_ACCESS_KEY', 'KAKAO_SECRET_KEY', 'KAKAO_CLOUD_HOST', 'KAKAO_CLOUD_USER'];
+
+          for (const { key, value } of secrets) {
+            if (keys.includes(key)) {
+              const v = (value ?? '').trim();
+              if (!v) throw new Error(`Empty secret: ${key}`);
+              console.log(`::add-mask::${v}`);
+              fs.appendFileSync(envFile, `${key}=${v}\n`);
+            }
+            if (key === 'KAKAO_CLOUD_SSH_KEY') {
+              const v = (value ?? '').replace(/\r\n/g, '\n');
+              if (!v.trim()) throw new Error('Empty secret: KAKAO_CLOUD_SSH_KEY');
+              v.split('\n').filter(l => l.trim()).forEach(l => console.log(`::add-mask::${l}`));
+              const delim = `SSH_KEY_${Math.random().toString(16).slice(2)}`;
+              fs.appendFileSync(envFile, `KAKAO_CLOUD_SSH_KEY<<${delim}\n${v}\n${delim}\n`);
+            }
+          }
+          EOF
+          rm -f /tmp/secrets.json
+
+      - name: Upload deploy script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.KAKAO_CLOUD_HOST }}
+          username: ${{ env.KAKAO_CLOUD_USER }}
+          key: ${{ env.KAKAO_CLOUD_SSH_KEY }}
+          source: '.github/scripts/deploy.sh'
+          target: '/tmp/deploy-scripts'
+          strip_components: 2
+
+      - name: Run deploy script
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ env.KAKAO_CLOUD_HOST }}
           username: ${{ env.KAKAO_CLOUD_USER }}
           key: ${{ env.KAKAO_CLOUD_SSH_KEY }}
-          port: 22
-          timeout: 500s
-          command_timeout: 500s
-          envs: KCR_REGISTRY,KCR_IMAGE,KAKAO_ACCESS_KEY,KAKAO_SECRET_KEY,INFISICAL_SERVICE_TOKEN,IMAGE_TAG
           script: |
-            set -Eeuo pipefail
-            IFS=$'\n\t'
-            trap 'code=$?; echo "❗ 배포 스크립트 오류(code=$code)"; exit $code' ERR
+            chmod +x /tmp/deploy-scripts/deploy.sh
+            /tmp/deploy-scripts/deploy.sh \
+              "${{ steps.tag.outputs.value }}" \
+              "${{ env.KCR_IMAGE }}" \
+              "${{ env.KCR_REGISTRY }}" \
+              "${{ env.KAKAO_ACCESS_KEY }}" \
+              "${{ env.KAKAO_SECRET_KEY }}" \
+              "${{ env.INFISICAL_SERVICE_TOKEN }}"
+            rm -rf /tmp/deploy-scripts
 
-            echo "🚀 배포 시작: ${KCR_IMAGE}:$IMAGE_TAG"
-
-            # prerequisites
-            if ! command -v docker &> /dev/null; then
-              echo "❌ Docker가 설치되어 있지 않습니다."
-              exit 1
-            fi
-
-            if ! command -v curl &> /dev/null; then
-              echo "❌ curl이 설치되어 있지 않습니다."
-              exit 1
-            fi
-
-            # login + pull
-            echo "${KAKAO_SECRET_KEY}" | docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password-stdin
-            if docker pull "${KCR_IMAGE}:$IMAGE_TAG"; then
-              echo "✅ 이미지 pull 성공: ${KCR_IMAGE}:$IMAGE_TAG"
-            else
-              echo "❌ 이미지 다운로드 실패!"
-              docker images
-              exit 1
-            fi
-
-            # 기존 컨테이너 확인 (무중단 배포를 위해 아직 제거하지 않음)
-            CONTAINER_NAME="thepromise-backend"
-
-            # 메인 컨테이너 확인 (제거하지 않고 정보만 수집)
-            OLD_CONTAINER_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
-            if [ -n "$OLD_CONTAINER_ID" ]; then
-              echo "🔄 기존 메인 컨테이너 발견: $OLD_CONTAINER_ID (유지 중 - 무중단 배포)"
-            else
-              echo "ℹ️ 기존 메인 컨테이너가 없습니다 (첫 배포)"
-            fi
-
-            # 임시(-new) 컨테이너만 정리 (이전 실패 배포의 잔여물)
-            NEW_CONTAINER_ID_OLD="$(docker ps -aq -f name="^${CONTAINER_NAME}-new$")"
-            if [ -n "$NEW_CONTAINER_ID_OLD" ]; then
-              echo "🧹 이전 실패 배포의 임시 컨테이너 발견: $NEW_CONTAINER_ID_OLD"
-              if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID_OLD" 2>/dev/null)" = "true" ]; then
-                echo "🛑 임시 컨테이너 중지 중..."
-                docker stop "$NEW_CONTAINER_ID_OLD"
-              fi
-              echo "🗑️ 임시 컨테이너 제거 중..."
-              docker rm "$NEW_CONTAINER_ID_OLD"
-              echo "✅ 임시 컨테이너 정리 완료"
-            fi
-
-            # Blue/Green 배포를 위한 포트 결정
-            CURRENT_PORT=3000
-            NEW_PORT=3001
-
-            # Nginx 설정에서 backend_active 업스트림 포트를 파싱
-            NGINX_CONFIG="/etc/nginx/sites-available/thepromise-backend"
-            if [ -f "$NGINX_CONFIG" ]; then
-              CURRENT_PORT="$(awk '/upstream[[:space:]]+backend_active[[:space:]]*{/,/}/ { if ($1=="server") { if (match($0,/127\.0\.0\.1:([0-9]+)/,m)) { print m[1]; exit } } }' "$NGINX_CONFIG" || true)"
-            fi
-            if [ "$CURRENT_PORT" = "3000" ]; then
-              NEW_PORT=3001
-            elif [ "$CURRENT_PORT" = "3001" ]; then
-              NEW_PORT=3000
-            else
-              echo "⚠️ backend_active 포트를 파악하지 못했습니다. 기본값(3000->3001)을 사용합니다."
-              CURRENT_PORT=3000
-              NEW_PORT=3001
-            fi
-
-            echo "🔄 현재 포트: $CURRENT_PORT, 새 포트: $NEW_PORT"
-
-            # env-file for container (token only; project id from .infisical.json in image)
-            cat > /tmp/.env << EOF
-            INFISICAL_SERVICE_TOKEN=${INFISICAL_SERVICE_TOKEN}
-            INFISICAL_ENV=prod
-            EOF
-
-            # 새 컨테이너 실행 (임시 이름으로)
-            echo "🆕 새 컨테이너 시작 중 (포트: $NEW_PORT)..."
-            NEW_CONTAINER_ID=$(docker run -d \
-              --name "${CONTAINER_NAME}-new" \
-              -p 127.0.0.1:$NEW_PORT:3000 \
-              --restart unless-stopped \
-              --env-file /tmp/.env \
-              -e NODE_ENV=production \
-              "${KCR_IMAGE}:$IMAGE_TAG")
-
-            # 환경 변수 파일 정리 (보안)
-            rm -f /tmp/.env
-
-            echo "⏳ 새 컨테이너 헬스체크 대기 중..."
-            echo "🔍 컨테이너 ID: $NEW_CONTAINER_ID"
-
-            # 헬스체크 (최대 60초 대기)
-            HEALTH_CHECK_ATTEMPTS=0
-            MAX_ATTEMPTS=20
-
-            while [ $HEALTH_CHECK_ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-              # 컨테이너가 실행 중인지 먼저 확인
-              if [ "$(docker inspect -f '{{.State.Running}}' "$NEW_CONTAINER_ID" 2>/dev/null)" != "true" ]; then
-                echo "❌ 컨테이너가 실행되지 않고 있습니다!"
-                break
-              fi
-              
-              if curl -f --max-time 3 http://localhost:$NEW_PORT/api/health > /dev/null 2>&1; then
-                echo "✅ 헬스체크 성공!"
-                break
-              fi
-              
-              HEALTH_CHECK_ATTEMPTS=$((HEALTH_CHECK_ATTEMPTS + 1))
-              echo "⏳ 헬스체크 시도 $HEALTH_CHECK_ATTEMPTS/$MAX_ATTEMPTS..."
-              sleep 3
-            done
-
-            # 헬스체크 실패시 롤백
-            if [ $HEALTH_CHECK_ATTEMPTS -eq $MAX_ATTEMPTS ]; then
-              echo "❌ 헬스체크 실패! 새 컨테이너를 제거합니다."
-              echo "🪵 새 컨테이너 로그 (최근 200줄):"
-              docker logs --tail 200 "$NEW_CONTAINER_ID" || true
-              docker stop "$NEW_CONTAINER_ID"
-              docker rm "$NEW_CONTAINER_ID"
-              echo "💥 배포가 실패했습니다. 로그를 확인하세요."
-              exit 1
-            fi
-
-            # Nginx를 통한 트래픽 전환
-            echo "🔄 Nginx 트래픽 전환 중..."
-            SWITCH_SCRIPT="/opt/thepromise/scripts/switch-backend.sh"
-            if [ ! -x "$SWITCH_SCRIPT" ]; then
-              echo "❌ 스크립트를 찾을 수 없거나 실행 권한이 없습니다: $SWITCH_SCRIPT"
-              echo "   /opt/thepromise/scripts 디렉토리에 switch-backend.sh 배포 여부를 확인하세요."
-              exit 1
-            fi
-            sudo "$SWITCH_SCRIPT" "$NEW_PORT" "$CURRENT_PORT"
-
-            # 전환 성공 후 기존 컨테이너 제거 (이름으로 재탐색하여 신뢰성 향상)
-            EXISTING_CANONICAL_ID="$(docker ps -aq -f name="^${CONTAINER_NAME}$")"
-            if [ -n "$EXISTING_CANONICAL_ID" ] && [ "$EXISTING_CANONICAL_ID" != "$NEW_CONTAINER_ID" ]; then
-              echo "🧹 이전 컨테이너 제거 중..."
-              if [ "$(docker inspect -f '{{.State.Running}}' "$EXISTING_CANONICAL_ID" 2>/dev/null)" = "true" ]; then
-                docker stop "$EXISTING_CANONICAL_ID" 2>/dev/null || true
-              fi
-              docker rm "$EXISTING_CANONICAL_ID" 2>/dev/null || true
-            fi
-
-            # 새 컨테이너 이름 변경
-            docker rename "${CONTAINER_NAME}-new" "$CONTAINER_NAME"
-
-            # dangling 이미지 정리
-            docker image prune -f
-
-            # 배포 완료 정보 출력
-            echo "🎉 배포 완료!"
-            echo "📊 배포 정보:"
-            echo "   - 이미지: ${KCR_IMAGE}:$IMAGE_TAG"
-            echo "   - 컨테이너: $NEW_CONTAINER_ID"
-            echo "   - 포트: $NEW_PORT (Nginx 통해 80으로 전달)"
-            echo "   - 상태: $(docker inspect --format='{{.State.Status}}' $CONTAINER_NAME)"
-
-            # 최종 상태 확인
-            echo "🔍 최종 상태 확인:"
-            docker ps -f name=$CONTAINER_NAME --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
-
-      - name: Verify deployment
-        if: success()
+      - name: Summary
         run: |
-          echo "✅ 배포가 성공적으로 완료되었습니다!"
-          echo "🏷️ 배포된 태그: ${IMAGE_TAG:-latest}"
-          echo "🌐 서비스 URL: http://${{ env.KAKAO_CLOUD_HOST }} (Nginx 리버스 프록시)"
-          echo "🔍 헬스체크: http://${{ env.KAKAO_CLOUD_HOST }}/api/health"
-
-      - name: Notify deployment failure
-        if: failure()
-        run: |
-          echo "❌ 배포가 실패했습니다!"
-          echo "🔍 로그를 확인하여 문제를 파악하세요."
-          echo "🔄 필요시 이전 버전으로 수동 롤백하세요."
+          echo "### 🚀 배포 완료" >> $GITHUB_STEP_SUMMARY
+          echo "- **이미지 태그**: ${{ steps.tag.outputs.value }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **서버**: ${{ env.KAKAO_CLOUD_HOST }}" >> $GITHUB_STEP_SUMMARY

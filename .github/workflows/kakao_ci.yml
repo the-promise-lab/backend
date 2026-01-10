@@ -1,9 +1,6 @@
-name: Kakao CI
+name: Kakao CI - Build & Release
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
   push:
     branches: [main]
   workflow_dispatch:
@@ -13,238 +10,90 @@ on:
         required: true
         default: 'patch'
         type: choice
-        options:
-          - patch
-          - minor
-          - major
+        options: [patch, minor, major]
 
 permissions:
   contents: write
 
 jobs:
-  test-and-build:
+  build-and-release:
     runs-on: ubuntu-latest
     env:
       INFISICAL_SERVICE_TOKEN: ${{ secrets.INFISICAL_SERVICE_TOKEN }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      - name: Install dependencies with retry
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+      - name: Calculate version
+        id: version
         run: |
-          n=0
-          exit_code=0
-          until [ $n -ge 5 ]
-          do
-            npm ci
-            exit_code=$?
-            if [ $exit_code -eq 0 ]; then
-              break
-            fi
-            n=$(($n+1))
-            echo "npm ci failed with exit code $exit_code. Retrying in 10 seconds..."
-            sleep 10
-          done
-          if [ $exit_code -ne 0 ]; then
-            echo "npm ci failed after 5 attempts."
-          fi
-          exit $exit_code
+          LATEST=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "v0.0.0")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
+          BUMP="${{ github.event.inputs.version_bump || 'patch' }}"
 
-      - name: Run linter
-        run: npm run lint
+          case "$BUMP" in
+            major) NEW="$((MAJOR+1)).0.0" ;;
+            minor) NEW="${MAJOR}.$((MINOR+1)).0" ;;
+            *)     NEW="${MAJOR}.${MINOR}.$((PATCH+1))" ;;
+          esac
 
-      - name: Run tests
-        run: npm run test
+          echo "new=v${NEW}" >> $GITHUB_OUTPUT
+          echo "📦 버전: v${NEW}"
 
-      - name: Run build
-        run: npm run build
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Get current version (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: current_version
+      - name: Install Infisical CLI
         run: |
-          if git tag -l "v*" | grep -q "^v"; then
-            LATEST_TAG=$(git describe --tags --abbrev=0 --match "v*" 2>/dev/null || echo "v0.0.0")
-          else
-            LATEST_TAG="v0.0.0"
-          fi
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "현재 최신 태그: $LATEST_TAG"
-
-      - name: Calculate new version (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: new_version
-        run: |
-          LATEST_TAG="${{ steps.current_version.outputs.latest_tag }}"
-          VERSION=${LATEST_TAG#v}  # Remove 'v' prefix
-
-          IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]:-0}
-          PATCH=${VERSION_PARTS[2]:-0}
-
-          # Determine version bump type
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            BUMP_TYPE="${{ github.event.inputs.version_bump }}"
-          else
-            BUMP_TYPE="patch"
-          fi
-
-          # Calculate new version
-          if [[ "$BUMP_TYPE" == "major" ]]; then
-            NEW_MAJOR=$((MAJOR + 1))
-            NEW_MINOR=0
-            NEW_PATCH=0
-          elif [[ "$BUMP_TYPE" == "minor" ]]; then
-            NEW_MAJOR=$MAJOR
-            NEW_MINOR=$((MINOR + 1))
-            NEW_PATCH=0
-          else
-            NEW_MAJOR=$MAJOR
-            NEW_MINOR=$MINOR
-            NEW_PATCH=$((PATCH + 1))
-          fi
-
-          NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "새 버전: v$NEW_VERSION"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Install Infisical CLI (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -Eeuo pipefail
           curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
-          sudo apt-get update
-          sudo apt-get install -y infisical
+          sudo apt-get update && sudo apt-get install -y infisical
 
-      - name: Load secrets from Infisical (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Load secrets
         run: |
-          set -Eeuo pipefail
-          infisical export \
-            --env=prod \
-            --token="$INFISICAL_SERVICE_TOKEN" \
-            --format=json \
-            --output-file=/tmp/infisical.json \
-            --silent
-          node <<'NODE'
+          infisical export --env=prod --token="$INFISICAL_SERVICE_TOKEN" --format=json --output-file=/tmp/secrets.json --silent
+          node <<'EOF'
           const fs = require('node:fs');
-          const envFile = process.env.GITHUB_ENV;
-          if (!envFile) {
-            process.exit(0);
+          const secrets = JSON.parse(fs.readFileSync('/tmp/secrets.json', 'utf8'));
+          const keys = ['KCR_REGISTRY', 'KCR_IMAGE', 'KAKAO_ACCESS_KEY', 'KAKAO_SECRET_KEY'];
+          for (const { key, value } of secrets) {
+            if (!keys.includes(key)) continue;
+            const v = (value ?? '').trim();
+            if (!v) throw new Error(`Empty secret: ${key}`);
+            console.log(`::add-mask::${v}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `${key}=${v}\n`);
           }
-          const entries = JSON.parse(fs.readFileSync('/tmp/infisical.json', 'utf8'));
-          const allowedKeys = new Set([
-            'KCR_REGISTRY',
-            'KCR_IMAGE',
-            'KAKAO_ACCESS_KEY',
-            'KAKAO_SECRET_KEY',
-          ]);
-          for (const entry of entries) {
-            const key = String(entry.key || '').trim();
-            if (!allowedKeys.has(key)) continue;
-            const value = String(entry.value ?? '').trim();
-            if (!value) {
-              throw new Error(`[CI] Required secret is empty: ${key}`);
-            }
-            process.stdout.write(`::add-mask::${value}\n`);
-            fs.appendFileSync(envFile, `${key}=${value}\n`, 'utf8');
-          }
-          NODE
-          rm -f /tmp/infisical.json
+          EOF
+          rm -f /tmp/secrets.json
 
-      - name: Login to Kakao Container Registry (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -Eeuo pipefail
-          echo "${KAKAO_SECRET_KEY}" | docker login "${KCR_REGISTRY}" --username "${KAKAO_ACCESS_KEY}" --password-stdin
+      - name: Login to KCR
+        run: echo "${{ env.KAKAO_SECRET_KEY }}" | docker login "${{ env.KCR_REGISTRY }}" -u "${{ env.KAKAO_ACCESS_KEY }}" --password-stdin
 
-      - name: Build and push Docker image (main branch)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
             ${{ env.KCR_IMAGE }}:latest
-            ${{ env.KCR_IMAGE }}:v${{ steps.new_version.outputs.new_version }}
+            ${{ env.KCR_IMAGE }}:${{ steps.version.outputs.new }}
           platforms: linux/amd64
-          cache-from: |
-            type=gha
-          cache-to: |
-            type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Test Docker build (PR only)
-        if: github.event_name == 'pull_request'
-        run: |
-          docker build -t test-image .
-          echo "✅ Docker 이미지 빌드 테스트 성공!"
-
-      - name: Check if tag already exists (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: check_tag
-        run: |
-          TARGET_TAG="v${{ steps.new_version.outputs.new_version }}"
-          if git ls-remote --tags origin "$TARGET_TAG" | grep -q "refs/tags/$TARGET_TAG"; then
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-            echo "Tag $TARGET_TAG already exists. Skipping tag and release steps."
-          else
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
-            echo "Tag $TARGET_TAG does not exist yet. Continuing with tag creation."
-          fi
-
-      - name: Create Git tag (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_tag.outputs.tag_exists != 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git tag -a "v${{ steps.new_version.outputs.new_version }}" -m "Release v${{ steps.new_version.outputs.new_version }}"
-          git push origin "v${{ steps.new_version.outputs.new_version }}"
-
-      - name: Create GitHub Release (main branch only)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_tag.outputs.tag_exists != 'true'
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ steps.new_version.outputs.new_version }}
-          name: Release v${{ steps.new_version.outputs.new_version }}
-          body: |
-            ## 🚀 새로운 릴리즈: v${{ steps.new_version.outputs.new_version }}
-
-            ### 📦 Docker 이미지 사용법
-            ```bash
-            # 최신 버전
-            docker run -p 3000:3000 ${{ env.KCR_IMAGE }}:latest
-
-            # 특정 버전 (권장)
-            docker run -p 3000:3000 ${{ env.KCR_IMAGE }}:v${{ steps.new_version.outputs.new_version }}
-            ```
-
-            ### 🔗 접속 정보
-            - **API**: http://localhost:3000/api
-            - **Health Check**: http://localhost:3000/api/health
-            - **API 문서**: http://localhost:3000/api/docs
-
-            ### 🔄 변경사항
-            이 릴리즈는 main 브랜치의 최신 변경사항을 포함합니다.
-
-            ### 📋 빌드 정보
-            - **커밋**: ${{ github.sha }}
-            - **작성자**: ${{ github.actor }}
-            - **Node.js**: 22.x
-            - **플랫폼**: linux/amd64
-          draft: false
-          prerelease: false
+          tag_name: ${{ steps.version.outputs.new }}
+          name: Release ${{ steps.version.outputs.new }}
+          generate_release_notes: true
