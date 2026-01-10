@@ -2,7 +2,7 @@ name: Kakao CI - Build & Release
 
 on:
   push:
-    branches: [main, fix/cd-security]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version_bump:

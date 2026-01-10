@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [Kakao CI - Build & Release]
     types: [completed]
-    branches: [main, fix/cd-security]
+    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
