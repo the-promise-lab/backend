@@ -36,9 +36,12 @@ export class ObjectStorageService {
       endpoint: this.configService.getOrThrow<string>('KAKAO_OBJECT_BASE'),
       forcePathStyle: true,
       credentials: {
-        accessKeyId: this.configService.getOrThrow<string>('KAKAO_ACCESS_KEY'),
-        secretAccessKey:
-          this.configService.getOrThrow<string>('KAKAO_SECRET_KEY'),
+        accessKeyId: this.configService.getOrThrow<string>(
+          'KAKAO_S3_ACCESS_KEY',
+        ),
+        secretAccessKey: this.configService.getOrThrow<string>(
+          'KAKAO_S3_SECRET_KEY',
+        ),
       },
     });
   }
