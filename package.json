@@ -38,7 +38,7 @@
     "backend"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/the-promise-lab/backend/issues"
