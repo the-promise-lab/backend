@@ -301,7 +301,7 @@ export class GameService {
     return this.findGameSession(userId);
   }
 
-  async getResources(): Promise<Record<string, string[]>> {
-    return this.gameResourceService.getResources();
+  async getResources(version?: string): Promise<Record<string, string[]>> {
+    return this.gameResourceService.getResources(version as any);
   }
 }
