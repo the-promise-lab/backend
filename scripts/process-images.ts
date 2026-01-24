@@ -91,9 +91,9 @@ async function processImages() {
 
       // Skip already processed files
       if (
-        key.includes('_w.webp') ||
-        key.includes('_s.png') ||
-        key.includes('_s.webp')
+        key.includes('@w.webp') ||
+        key.includes('@s.png') ||
+        key.includes('@s.webp')
       ) {
         continue;
       }
@@ -109,7 +109,7 @@ async function processImages() {
 
         // 1. Webp original size
         const webpOriginal = await sharp(buffer).webp().toBuffer();
-        await upload(baseName + '_w.webp', webpOriginal, 'image/webp');
+        await upload(baseName + '@w.webp', webpOriginal, 'image/webp');
 
         // 2 & 3: Resize (Max height 512, width 1024)
         const resizer = sharp(buffer).resize({
@@ -120,10 +120,10 @@ async function processImages() {
         });
 
         const pngResized = await resizer.clone().png().toBuffer();
-        await upload(baseName + '_s.png', pngResized, 'image/png');
+        await upload(baseName + '@s.png', pngResized, 'image/png');
 
         const webpResized = await resizer.clone().webp().toBuffer();
-        await upload(baseName + '_s.webp', webpResized, 'image/webp');
+        await upload(baseName + '@s.webp', webpResized, 'image/webp');
 
         console.log('Successfully processed:', key);
       } catch (err) {
