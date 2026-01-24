@@ -61,19 +61,19 @@ export class GameResourceService {
   private filterByVersion(names: string[], version: ResourceVersion): string[] {
     switch (version) {
       case 'webp':
-        return names.filter((name) => name.endsWith('_w.webp'));
+        return names.filter((name) => name.endsWith('@w.webp'));
       case 'resized-png':
-        return names.filter((name) => name.endsWith('_s.png'));
+        return names.filter((name) => name.endsWith('@s.png'));
       case 'resized-webp':
-        return names.filter((name) => name.endsWith('_s.webp'));
+        return names.filter((name) => name.endsWith('@s.webp'));
       case 'original':
       default:
         // Exclude all versioned suffixes
         return names.filter(
           (name) =>
-            !name.endsWith('_w.webp') &&
-            !name.endsWith('_s.png') &&
-            !name.endsWith('_s.webp'),
+            !name.endsWith('@w.webp') &&
+            !name.endsWith('@s.png') &&
+            !name.endsWith('@s.webp'),
         );
     }
   }
@@ -106,5 +106,31 @@ export class GameResourceService {
       return ROOT_DIRECTORY_KEY;
     }
     return top;
+  }
+
+  /**
+   * Transforms an image URL to a versioned version.
+   */
+  transformImageUrl(
+    url: string | null,
+    version: ResourceVersion,
+  ): string | null {
+    if (!url) return null;
+    if (version === 'original') return url;
+
+    const lastDotIndex = url.lastIndexOf('.');
+    if (lastDotIndex === -1) return url;
+
+    const base = url.substring(0, lastDotIndex);
+    switch (version) {
+      case 'webp':
+        return `${base}@w.webp`;
+      case 'resized-png':
+        return `${base}@s.png`;
+      case 'resized-webp':
+        return `${base}@s.webp`;
+      default:
+        return url;
+    }
   }
 }

@@ -13,7 +13,7 @@ export class GameService {
     private readonly gameResourceService: GameResourceService,
   ) {}
 
-  async findGameSession(userId: number) {
+  async findGameSession(userId: number, version: any = 'original') {
     const session = await this.prisma.gameSession.findFirst({
       where: { userId, status: 'IN_PROGRESS' },
       orderBy: { id: 'desc' },
@@ -73,8 +73,14 @@ export class GameService {
               name: character.name,
               age: character.age,
               description: character.description,
-              selectImage: character.selectImage,
-              portraitImage: character.portraitImage,
+              selectImage: this.gameResourceService.transformImageUrl(
+                character.selectImage,
+                version,
+              ),
+              portraitImage: this.gameResourceService.transformImageUrl(
+                character.portraitImage,
+                version,
+              ),
               defaultHp: character.defaultHp,
               defaultMental: character.defaultMental,
               bgColor: character.bgColor,
@@ -102,7 +108,10 @@ export class GameService {
         code: session.bag.code,
         name: session.bag.name,
         capacity: session.bag.capacity,
-        image: session.bag.image,
+        image: this.gameResourceService.transformImageUrl(
+          session.bag.image,
+          version,
+        ),
         description: session.bag.description,
       },
       bagCapacityUsed: session.bagCapacityUsed,
@@ -121,7 +130,10 @@ export class GameService {
         item: {
           id: Number(inv.item.id),
           name: inv.item.name,
-          image: inv.item.image,
+          image: this.gameResourceService.transformImageUrl(
+            inv.item.image,
+            version,
+          ),
           capacityCost: inv.item.capacityCost,
           isConsumable: inv.item.isConsumable,
           storeSectionId: inv.item.storeSectionId
@@ -136,18 +148,21 @@ export class GameService {
     };
   }
 
-  async createGameSession(userId: number) {
+  async createGameSession(userId: number, version: any = 'original') {
     await this.gameSessionLifecycleService.createOrResetSession(userId);
-    return this.findGameSession(userId);
+    return this.findGameSession(userId, version);
   }
 
-  async getCharacterGroups() {
+  async getCharacterGroups(version: any = 'original') {
     const groups = await this.prisma.characterGroup.findMany();
     return groups.map((g) => ({
       id: Number(g.id),
       code: g.code,
       name: g.name,
-      groupSelectImage: g.groupSelectImage,
+      groupSelectImage: this.gameResourceService.transformImageUrl(
+        g.groupSelectImage,
+        version,
+      ),
       deathEndingIndex:
         g.deathEndingIndex === null || g.deathEndingIndex === undefined
           ? null
@@ -157,7 +172,11 @@ export class GameService {
     }));
   }
 
-  async selectCharacterSet(userId: number, dto: SelectCharacterSetDto) {
+  async selectCharacterSet(
+    userId: number,
+    dto: SelectCharacterSetDto,
+    version: any = 'original',
+  ) {
     const gameSession = await this.prisma.gameSession.findFirst({
       where: { userId, status: 'IN_PROGRESS' },
       orderBy: { id: 'desc' },
@@ -237,8 +256,14 @@ export class GameService {
             name: pc.character.name,
             age: pc.character.age,
             description: pc.character.description,
-            selectImage: pc.character.selectImage,
-            portraitImage: pc.character.portraitImage,
+            selectImage: this.gameResourceService.transformImageUrl(
+              pc.character.selectImage,
+              version,
+            ),
+            portraitImage: this.gameResourceService.transformImageUrl(
+              pc.character.portraitImage,
+              version,
+            ),
             defaultHp: pc.character.defaultHp,
             defaultMental: pc.character.defaultMental,
             bgColor: pc.character.bgColor,
@@ -251,7 +276,7 @@ export class GameService {
     });
   }
 
-  async getSetupInfo() {
+  async getSetupInfo(version: any = 'original') {
     const [bags, storeSections] = await Promise.all([
       this.prisma.bag.findMany(),
       this.prisma.storeSection.findMany({
@@ -266,7 +291,7 @@ export class GameService {
       code: b.code,
       name: b.name,
       capacity: b.capacity,
-      image: b.image,
+      image: this.gameResourceService.transformImageUrl(b.image, version),
       description: b.description,
     }));
 
@@ -274,11 +299,14 @@ export class GameService {
       id: Number(section.id),
       code: section.code,
       displayName: section.displayName,
-      backgroundImage: section.backgroundImage,
+      backgroundImage: this.gameResourceService.transformImageUrl(
+        section.backgroundImage,
+        version,
+      ),
       items: section.item.map((item) => ({
         id: Number(item.id),
         name: item.name,
-        image: item.image,
+        image: this.gameResourceService.transformImageUrl(item.image, version),
         capacityCost: item.capacityCost,
         isConsumable: item.isConsumable,
         storeSectionId: item.storeSectionId
@@ -296,9 +324,10 @@ export class GameService {
   async submitGameSessionInventory(
     userId: number,
     dto: SubmitGameSessionInventoryDto,
+    version: any = 'original',
   ) {
     await this.gameSessionLifecycleService.confirmInventory(userId, dto);
-    return this.findGameSession(userId);
+    return this.findGameSession(userId, version);
   }
 
   async getResources(version?: string): Promise<Record<string, string[]>> {
