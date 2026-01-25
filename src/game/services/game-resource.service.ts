@@ -10,12 +10,19 @@ interface CacheEntry<T> {
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const ROOT_DIRECTORY_KEY = 'root';
 
+export type ResourceVersion =
+  | 'original'
+  | 'webp'
+  | 'resized-png'
+  | 'resized-webp';
+
 /**
  * GameResourceService groups object storage paths and converts them to CDN URLs.
  */
 @Injectable()
 export class GameResourceService {
-  private cache: CacheEntry<Record<string, string[]>> | null = null;
+  private cacheMap: Map<string, CacheEntry<Record<string, string[]>>> =
+    new Map();
   private readonly cacheTtlMs = CACHE_TTL_MS;
 
   constructor(
@@ -26,21 +33,48 @@ export class GameResourceService {
   /**
    * Returns grouped game resources with CDN URLs.
    */
-  async getResources(): Promise<Record<string, string[]>> {
-    if (this.cache && Date.now() < this.cache.expiresAt) {
-      return this.cache.value;
+  async getResources(
+    version: ResourceVersion = 'original',
+  ): Promise<Record<string, string[]>> {
+    const cached = this.cacheMap.get(version);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.value;
     }
+
     const cdnBase = this.configService.getOrThrow<string>('KAKAO_CDN_BASE');
     try {
       const names = await this.objectStorageService.getObjectNames();
-      const grouped = this.groupByDirectory(names, cdnBase);
-      this.cache = {
+      const filteredNames = this.filterByVersion(names, version);
+      const grouped = this.groupByDirectory(filteredNames, cdnBase);
+
+      this.cacheMap.set(version, {
         value: grouped,
         expiresAt: Date.now() + this.cacheTtlMs,
-      };
+      });
+
       return grouped;
     } catch {
       throw new ServiceUnavailableException('Failed to load game resources.');
+    }
+  }
+
+  private filterByVersion(names: string[], version: ResourceVersion): string[] {
+    switch (version) {
+      case 'webp':
+        return names.filter((name) => name.endsWith('@w.webp'));
+      case 'resized-png':
+        return names.filter((name) => name.endsWith('@s.png'));
+      case 'resized-webp':
+        return names.filter((name) => name.endsWith('@s.webp'));
+      case 'original':
+      default:
+        // Exclude all versioned suffixes
+        return names.filter(
+          (name) =>
+            !name.endsWith('@w.webp') &&
+            !name.endsWith('@s.png') &&
+            !name.endsWith('@s.webp'),
+        );
     }
   }
 
@@ -72,5 +106,31 @@ export class GameResourceService {
       return ROOT_DIRECTORY_KEY;
     }
     return top;
+  }
+
+  /**
+   * Transforms an image URL to a versioned version.
+   */
+  transformImageUrl(
+    url: string | null,
+    version: ResourceVersion,
+  ): string | null {
+    if (!url) return null;
+    if (version === 'original') return url;
+
+    const lastDotIndex = url.lastIndexOf('.');
+    if (lastDotIndex === -1) return url;
+
+    const base = url.substring(0, lastDotIndex);
+    switch (version) {
+      case 'webp':
+        return `${base}@w.webp`;
+      case 'resized-png':
+        return `${base}@s.png`;
+      case 'resized-webp':
+        return `${base}@s.webp`;
+      default:
+        return url;
+    }
   }
 }
